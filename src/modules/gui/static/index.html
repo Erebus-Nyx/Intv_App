@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Analysis GUI</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.mobile.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f4f6fa;
+      color: #222;
+      margin: 0;
+      padding: 0;
+    }
+    #loginPanel, #app, #adminPanel {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      max-width: 420px;
+      margin: 2em auto;
+      padding: 2em 2em 1.5em 2em;
+    }
+    h1, h2 {
+      color: #2a3b5d;
+      margin-top: 0;
+    }
+    button {
+      background: #4caf50;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 0.6em 1.2em;
+      font-size: 1em;
+      cursor: pointer;
+      margin-top: 0.5em;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #388e3c;
+    }
+    input, select {
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      padding: 0.5em;
+      margin-bottom: 1em;
+      width: 100%;
+      font-size: 1em;
+      box-sizing: border-box;
+    }
+    label {
+      font-weight: 500;
+      margin-bottom: 0.2em;
+      display: block;
+    }
+    #status {
+      margin-bottom: 1em;
+      font-size: 1.1em;
+      color: #388e3c;
+    }
+    #progressBarContainer {
+      margin-bottom: 1em;
+    }
+    #result, #cliOutput {
+      background: #f8f8f8;
+      border-radius: 6px;
+      padding: 1em;
+      margin-top: 1em;
+      font-family: 'Fira Mono', 'Consolas', monospace;
+      font-size: 0.98em;
+      color: #222;
+      max-height: 300px;
+      overflow: auto;
+    }
+    #recordingIndicator {
+      margin-bottom: 1em;
+      font-size: 1.1em;
+    }
+    @media (max-width: 600px) {
+      #loginPanel, #app, #adminPanel {
+        max-width: 98vw;
+        padding: 1em 0.5em;
+      }
+      h1, h2 {
+        font-size: 1.2em;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="loginPanel">
+    <h2>Login</h2>
+    <form id="loginForm">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" required><br>
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" required><br>
+      <button type="submit">Login</button>
+      <div id="loginError" style="color:red;display:none;"></div>
+    </form>
+  </div>
+  <div id="app" style="display:none;">
+    <h1>Document Analysis System</h1>
+    <div id="status"></div>
+    <div id="workflow">
+      <button id="startBtn">Start New Workflow</button>
+      <div id="moduleSelect" style="display:none;">
+        <label for="modules">Select Module:</label>
+        <select id="modules"></select>
+        <button id="runBtn">Run</button>
+        <label style="margin-left:16px;"><input type="checkbox" id="defaultsCheckbox"> Use config defaults only (no data source)</label>
+      </div>
+      <div id="progress" style="display:none;"></div>
+      <div id="result" style="display:none;"></div>
+      <button id="logoutBtn">Logout</button>
+    </div>
+    <div id="adminPanel" style="display:none;margin-top:2em;">
+      <h2>Admin CLI Emulation</h2>
+      <form id="adminCliForm">
+        <label for="cliFile">Input file (in /app/config/uploads):</label>
+        <input type="text" id="cliFile" name="cliFile" placeholder="example.txt" required><br>
+        <label for="cliType">Type:</label>
+        <select id="cliType" name="cliType">
+          <option value="txt">txt</option>
+          <option value="pdf">pdf</option>
+          <option value="docx">docx</option>
+          <option value="mp3">mp3</option>
+          <option value="wav">wav</option>
+          <option value="mp4">mp4</option>
+          <option value="m4a">m4a</option>
+        </select><br>
+        <label for="cliExtra">Extra CLI args:</label>
+        <input type="text" id="cliExtra" name="cliExtra" placeholder="--output-format json"><br>
+        <button type="submit">Run CLI</button>
+      </form>
+      <pre id="cliOutput" style="background:#222;color:#fff;padding:1em;margin-top:1em;max-height:300px;overflow:auto;"></pre>
+    </div>
+    <div id="wssConfigPanel" style="margin-bottom:1em;">
+      <label for="wssInput">WebSocket URL:</label>
+      <input type="text" id="wssInput" value="" placeholder="wss://yourserver:3773/ws" style="width:60%;">
+      <button id="wssSetBtn">Set</button>
+    </div>
+    <div id="progressBarContainer" style="display:none;width:100%;background:#eee;border-radius:8px;margin:1em 0;">
+      <div id="progressBar" style="width:0%;height:18px;background:#4caf50;border-radius:8px;transition:width 0.4s;"></div>
+    </div>
+    <div id="recordingIndicator" style="display:none;color:#d32f2f;font-weight:bold;margin-bottom:1em;">
+      <span style="animation: blink 1s linear infinite;">●</span> Recording...
+    </div>
+    <style>
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.2; }
+      }
+    </style>
+
+    <script>
+      // Device detection and UI switching
+      function isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      }
+      document.addEventListener('DOMContentLoaded', function() {
+        if (isMobile()) {
+          document.body.classList.add('mobile');
+        } else {
+          document.body.classList.add('desktop');
+        }
+      });
+    </script>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

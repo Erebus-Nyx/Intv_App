@@ -1,0 +1,14 @@
+PyPDF2
+python-docx
+requests
+pdf2image
+pytesseract
+torch  # For CUDA detection
+fastapi
+uvicorn[standard]
+websockets
+itsdangerous
+python-multipart
+pyjwt
+cryptography
+python-jose[cryptography]

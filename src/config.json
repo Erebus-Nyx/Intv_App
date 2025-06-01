@@ -1,0 +1,10 @@
+{
+  "llm_api_base": "http://localhost",
+  "llm_api_key": null,
+  "llm_api_port": 11434,
+  "llm_provider": "ollama",
+  "model": "hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M",
+  "external_rag": false,
+  "purge_variables": false,
+  "name": "User"
+}

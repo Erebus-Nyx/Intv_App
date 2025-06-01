@@ -1,0 +1,70 @@
+# Ignore Python cache and venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env/
+ENV/
+
+# Ignore build and dist
+build/
+dist/
+*.egg-info/
+
+# Ignore output and logs
+src/modules/gui/output/
+*.log
+
+# Ignore secrets
+.secrets
+config/*.secrets
+
+# Ignore test artifacts
+*.tmp
+*.bak
+
+# Ignore Docker build cache
+__docker_build__/
+
+# Ignore local config
+.vscode/
+
+# Ignore everything except source, config, Docker, and docs
+!src/
+!config/
+!docker/
+!README.md
+!requirements.txt
+!setup.py
+!docker/docker-compose.yml
+
+# Ignore Jupyter and notebook checkpoints
+.ipynb_checkpoints
+
+# Ignore node_modules and frontend build artifacts
+node_modules/
+
+# Ignore data, uploads, and outputs
+config/uploads/
+data/uploads/
+media/
+logs/
+outputs/
+
+# Ignore venv folder
+.venv/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Do not ignore config and src JSON/YAML files
+!config/*.json
+!config/*.yaml
+!config/*.yml
+!src/**/*.json
+!src/**/*.yaml
+!src/**/*.yml
+
+# End of .dockerignore

@@ -1,0 +1,13 @@
+intv-app (C) 2025 David Anderson
+
+This product includes software developed by David Anderson and contributors.
+
+Third-party components and libraries used in this project include:
+
+- FastAPI (https://fastapi.tiangolo.com/) - Copyright (c) 2018 Sebastián Ramírez, MIT License
+- Uvicorn (https://www.uvicorn.org/) - Copyright (c) 2018 Tom Christie, MIT License
+- PyPDF2, python-docx, requests, pdf2image, pytesseract, torch, websockets, itsdangerous, python-multipart, pyjwt, cryptography, python-jose[cryptography] - Various authors, MIT/Apache/BSD Licenses
+
+This software is distributed under the MIT License. See the LICENSE file for details.
+
+If you redistribute this software or derivative works, you must retain this NOTICE file, the LICENSE file, and give appropriate credit to all original authors and contributors of this project and its dependencies.

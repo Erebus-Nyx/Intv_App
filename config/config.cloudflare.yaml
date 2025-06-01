@@ -1,0 +1,10 @@
+tunnel: 
+credentials-file: 
+originRequest:
+    httpHostHeader: 
+ingress:
+  - hostname: 
+    service: 
+    originRequest:
+      httpHostHeader: 
+  - service: http_status:404

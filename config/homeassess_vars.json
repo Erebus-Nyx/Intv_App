@@ -1,0 +1,19 @@
+{
+  "Name": {"default": "[No Name]", "hint": "Full name of the resident/subject"},
+  "Role": {"default": "Resident", "hint": "Role in household (e.g. mother, child, etc.)"},
+  "AssessmentDate": {"default": "", "hint": "Date of home assessment"},
+  "Location": {"default": "", "hint": "Location of home"},
+  "Address": {"default": "", "hint": "Address of home"},
+  "Consent": {"default": "", "hint": "Consent for assessment (yes/no)"},
+  "PhotoConsent": {"default": "", "hint": "Consent for photographs (yes/no)"},
+  "Yard": {"default": "", "hint": "Yard assessment and comments"},
+  "LivingRoom": {"default": "", "hint": "Living room assessment and comments"},
+  "DiningRoom": {"default": "", "hint": "Dining room assessment and comments"},
+  "Kitchen": {"default": "", "hint": "Kitchen assessment and comments"},
+  "Bathroom": {"default": "", "hint": "Bathroom assessment and comments"},
+  "ChildRoom": {"default": "", "hint": "Child's room assessment and comments"},
+  "Garage": {"default": "", "hint": "Garage assessment and comments"},
+  "OtherAreas": {"default": "", "hint": "Other areas assessment and comments"},
+  "Utilities": {"default": "", "hint": "Utilities assessment and comments"},
+  "Summary": {"default": "", "hint": "Summary and closing"}
+}

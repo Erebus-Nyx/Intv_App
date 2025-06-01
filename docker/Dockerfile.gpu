@@ -1,0 +1,39 @@
+# Dockerfile.gpu - Dockerfile for GPU-enabled deployment
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    tesseract-ocr libgl1-mesa-glx poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt ./
+RUN pip3 install --upgrade pip && pip3 install -r requirements.txt
+
+# Install FastAPI, Uvicorn, and WebSockets dependencies
+RUN pip3 install fastapi uvicorn[standard] websockets
+
+# Copy the rest of the application
+COPY . .
+
+# Load environment variables from .env if present
+# ENV_FILE=.env
+# if [ -f "$ENV_FILE" ]; then
+#     export $(grep -v '^#' $ENV_FILE | xargs)
+# fi
+
+# Set environment variables for CUDA
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Add environment variables for admin user (can be set at runtime)
+ENV APP_ADMIN_USER=admin
+ENV APP_ADMIN_PASS=password123
+
+# Expose the GUI port for NGINX/Cloudflare proxy
+EXPOSE 3773
+
+# Default command: run the FastAPI GUI app (can override for CLI)
+CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4"]

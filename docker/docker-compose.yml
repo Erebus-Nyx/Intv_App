@@ -1,0 +1,73 @@
+networks:
+  vLAN:
+  #  external: true
+
+services:
+  intv_app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+    image: python-cli-app-gpu
+    container_name: intv_app
+    tty: true
+    env_file:
+      - .env
+    environment:
+      # LLM and RAG config (override with your own env or .env file)
+      LLM_API_BASE: ${LLM_API_BASE:-http://localhost}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_PORT: ${LLM_API_PORT:-11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      MODEL: ${MODEL:-hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M}
+      EXTERNAL_RAG: ${EXTERNAL_RAG:-false}
+      PURGE_VARIABLES: ${PURGE_VARIABLES:-false}
+      NAME: ${NAME:-admin}
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
+      SESSION_SECRET: ${SESSION_SECRET:-""}
+      CF_AUD: ${CF_AUD}
+      APP_ADMIN_USER: ${APP_ADMIN_USER:-admin}
+      APP_ADMIN_PASS: ${APP_ADMIN_PASS:-admin}
+    volumes:
+      - ./config:/app/config
+      - ./src:/app/src
+      - ./requirements.txt:/app/requirements.txt
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3773/whoami"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      vLAN:
+
+  cloudflared-test:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-test
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./scripts/cloudflared-entrypoint.sh:/entrypoint.sh:ro
+      - ./config/config.cloudflare.yaml:/mnt/g/WSL/nyx/workspace/python-cli-app/config/config.cloudflare.yaml:ro
+      - ../../web-apps/interview summary.json:/mnt/g/WSL/nyx/web-apps/interview summary.json
+    environment:
+      NO_TLS_VERIFY: "true"
+      NO_AUTOUPDATE: "true"
+    entrypoint: ["/entrypoint.sh"]
+    networks:
+      vLAN:
+    depends_on:
+      - intv_app
+    healthcheck:
+      test: ["CMD", "pgrep", "cloudflared"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

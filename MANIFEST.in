@@ -1,0 +1,22 @@
+# Include all config files (JSON, YAML, YML) recursively
+recursive-include config *.json *.yaml *.yml
+
+# Include all source data/config files (JSON, YAML, YML) recursively
+recursive-include src *.json *.yaml *.yml
+
+# Always include top-level documentation and legal files
+include README.md
+include LICENSE
+include NOTICE
+
+# Example: To include all Markdown docs in docs/ (uncomment if needed)
+# recursive-include docs *.md
+
+# Example: To include all static assets (uncomment if needed)
+# recursive-include src/static *
+
+# Example: To include all files in a web frontend (uncomment if needed)
+# recursive-include web-apps/frontend *
+
+# For more info, see: https://packaging.python.org/en/latest/guides/using-manifest-in/
+# and https://github.com/pypa/sampleproject/blob/main/MANIFEST.in

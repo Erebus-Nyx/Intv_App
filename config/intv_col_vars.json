@@ -1,0 +1,23 @@
+{
+  "Name": {"default": "[No Name]", "hint": "Full name of the collateral"},
+  "Role": {"default": "Collateral", "hint": "Role in household or relationship to case"},
+  "InterviewDate": {"default": "", "hint": "Date of interview"},
+  "Location": {"default": "", "hint": "Location of interview"},
+  "Address": {"default": "", "hint": "Address of interview location"},
+  "OthersPresent": {"default": "", "hint": "Others present during interview"},
+  "Rapport": {"default": "", "hint": "How rapport was established, consent, purpose explained"},
+  "Observation": {"default": "", "hint": "Appearance, health, cognitive level, language, social skills"},
+  "Family": {"default": "", "hint": "Family members living with collateral"},
+  "Employment": {"default": "", "hint": "Employment status"},
+  "Chores": {"default": "", "hint": "Chores responsible for"},
+  "Medications": {"default": "", "hint": "Any regular medications"},
+  "Discipline": {"default": "", "hint": "How discipline is handled"},
+  "PhysicalAbuse": {"default": "", "hint": "Any forms of physical abuse?"},
+  "DomesticViolence": {"default": "", "hint": "Any forms of domestic violence?"},
+  "CigAlcoholDrugs": {"default": "", "hint": "Screening for cig, alcohol, drugs"},
+  "Uncomfortable": {"default": "", "hint": "Anyone making collateral feel uncomfortable or scared?"},
+  "SafePeople": {"default": "", "hint": "Who are safe people collateral can go to for help?"},
+  "Allegation": {"default": "", "hint": "Allegation discussed"},
+  "Screening": {"default": "", "hint": "Screening for neglect, physical, sexual abuse"},
+  "Summary": {"default": "", "hint": "Summary and closing"}
+}
