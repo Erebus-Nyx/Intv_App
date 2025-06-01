@@ -1,4 +1,4 @@
-# CPU-only Dockerfile for Intv-App
+# CPU/ARM-optimized Dockerfile for Intv-App
 FROM python:3.10-slim
 
 # Set environment variables
@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (CPU/ARM compatible)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -17,20 +17,29 @@ RUN apt-get update && \
         libssl-dev \
         curl \
         git \
-        && rm -rf /var/lib/apt/lists/*
+        tesseract-ocr \
+        libgl1-mesa-glx \
+        poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY requirements.txt ./
 
-# Install Python dependencies (CPU-only)
+# Install Python dependencies (CPU/ARM only)
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install fastapi uvicorn[standard] websockets
 
 # Copy application code
 COPY . .
 
-# Expose port (adjust as needed)
-EXPOSE 8080
+# Expose the GUI port for NGINX/Cloudflare proxy
+EXPOSE 3773
 
-# Set entrypoint (adjust as needed)
-CMD ["python", "src/main.py"]
+# Set entrypoint for FastAPI GUI app (can override for CLI)
+CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "2"]
+
+# Notes:
+# - This image is compatible with x86 and ARM (Raspberry Pi) architectures.
+# - For ARM, ensure all dependencies in requirements.txt are available for ARM.
+# - You can override the CMD for CLI or other entrypoints as needed.

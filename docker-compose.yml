@@ -1,13 +1,13 @@
 networks:
   vLAN:
-  #  external: true
+    external: true
 
 services:
   intv_app:
     build:
       context: .
       dockerfile: docker/Dockerfile.gpu
-    image: python-cli-app-gpu
+    image: intv-app-gpu
     container_name: intv_app
     tty: true
     env_file:
@@ -55,18 +55,19 @@ services:
       - .env
     volumes:
       - ./scripts/cloudflared-entrypoint.sh:/entrypoint.sh:ro
-      - ./config/config.cloudflare.yaml:/mnt/g/WSL/nyx/workspace/python-cli-app/config/config.cloudflare.yaml:ro
-      - ../../web-apps/interview summary.json:/mnt/g/WSL/nyx/web-apps/interview summary.json
+      - ./config/config.cloudflare.yaml:/config/config.cloudflare.yaml:ro
     environment:
       NO_TLS_VERIFY: "true"
       NO_AUTOUPDATE: "true"
+      # Optionally allow config path override
+      CLOUDFLARED_CONFIG: ${CLOUDFLARED_CONFIG:-/config/config.cloudflare.yaml}
     entrypoint: ["/entrypoint.sh"]
     networks:
       vLAN:
     depends_on:
       - intv_app
     healthcheck:
-      test: ["CMD", "pgrep", "cloudflared"]
+      test: ["CMD-SHELL", "pgrep cloudflared || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

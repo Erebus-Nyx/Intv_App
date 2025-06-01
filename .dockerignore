@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 venv/
+.venv/
 .env/
 ENV/
 
@@ -51,9 +52,6 @@ data/uploads/
 media/
 logs/
 outputs/
-
-# Ignore venv folder
-.venv/
 
 # Ignore system files
 .DS_Store
