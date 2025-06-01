@@ -126,3 +126,4 @@ node_modules/
 workspace/
 
 # End of .gitignore
+/.venv
