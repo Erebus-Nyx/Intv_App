@@ -26,6 +26,7 @@ from fastapi import Security
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import shutil
 from fastapi import APIRouter
+import yaml
 
 # Secret key for session cookies
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_urlsafe(32))
@@ -83,8 +84,22 @@ def get_users_from_config():
         users[env_user] = {'password': env_pass, 'role': 'admin', 'name': env_name}
     return users
 
-# Replace dummy USERS with config/env-driven users
-USERS = get_users_from_config()
+def get_users_from_yaml():
+    users_yaml_path = Path(__file__).parent.parent.parent / "config" / "users.yaml"
+    users = {}
+    if users_yaml_path.exists():
+        with open(users_yaml_path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+            for user in data.get('users', []):
+                users[user['username']] = {
+                    'password': user['password'],
+                    'role': user.get('role', 'user'),
+                    'name': user.get('name', user['username'])
+                }
+    return users
+
+# Replace USERS with users loaded from users.yaml
+USERS = get_users_from_yaml()
 
 # Add function to add users at runtime (in-memory only)
 def add_user(username, password, role='user'):

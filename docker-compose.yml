@@ -30,8 +30,8 @@ services:
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
       SESSION_SECRET: ${SESSION_SECRET:-""}
       CF_AUD: ${CF_AUD}
-      APP_ADMIN_USER: ${APP_ADMIN_USER:-admin}
-      APP_ADMIN_PASS: ${APP_ADMIN_PASS:-password1234}
+      #APP_ADMIN_USER: ${APP_ADMIN_USER:-admin}
+      #APP_ADMIN_PASS: ${APP_ADMIN_PASS:-password1234}
       # USE_CLOUDFLARE_TUNNEL: ${USE_CLOUDFLARE_TUNNEL:-0}  # Removed to ensure .env is used
     volumes:
       - ./config:/app/config

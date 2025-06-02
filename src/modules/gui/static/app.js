@@ -68,23 +68,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.getElementById('loginForm').onsubmit = async (e) => {
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
-    const resp = await fetch('/login', { method: 'POST', body: formData, credentials: 'same-origin' });
-    if (resp.redirected || resp.ok) {
-      document.getElementById('loginError').style.display = 'none';
-      location.reload();
-    } else {
-      const err = await resp.json();
-      document.getElementById('loginError').textContent = err.error || 'Login failed';
-      document.getElementById('loginError').style.display = '';
+    const loginBtn = document.querySelector('#loginForm button[type="submit"]');
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Logging in...';
     }
-  };
+    document.getElementById('loginError').style.display = 'none';
+    try {
+      const resp = await fetch('/api/v1/login', { method: 'POST', body: formData, credentials: 'same-origin' });
+      if (resp.redirected || resp.ok) {
+        document.getElementById('loginError').style.display = 'none';
+        location.reload();
+      } else {
+        let err = 'Login failed';
+        try {
+          const data = await resp.json();
+          err = data.error || err;
+        } catch {}
+        document.getElementById('loginError').textContent = err;
+        document.getElementById('loginError').style.display = '';
+      }
+    } catch (e) {
+      document.getElementById('loginError').textContent = 'Network error. Please try again.';
+      document.getElementById('loginError').style.display = '';
+    } finally {
+      if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Login';
+      }
+    }
+  });
 
   document.getElementById('logoutBtn').onclick = () => {
     fetch('/logout').then(() => location.reload());
