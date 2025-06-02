@@ -22,6 +22,10 @@ RUN apt-get update && \
         poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Cloudflared (static binary from Cloudflare)
+RUN curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared \
+    && chmod +x /usr/local/bin/cloudflared
+
 # Copy requirements
 COPY requirements.txt ./
 
@@ -36,8 +40,12 @@ COPY . .
 # Expose the GUI port for NGINX/Cloudflare proxy
 EXPOSE 3773
 
+# Set environment variables for admin user (can be set at runtime)
+ENV APP_ADMIN_USER=admin
+ENV APP_ADMIN_PASS=password123
+
 # Set entrypoint for FastAPI GUI app (can override for CLI)
-CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "2"]
+CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4"]
 
 # Notes:
 # - This image is compatible with x86 and ARM (Raspberry Pi) architectures.

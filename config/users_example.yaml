@@ -1,0 +1,21 @@
+# users_example.yaml - Template for multi-user login configuration
+#
+# Use this file as a template for creating your own users.yaml file.
+# Do not include this file in production or runtime environments.
+#
+# Example structure and documentation:
+
+users:
+  - username: "admin"
+    password: "password123"
+    role: "user"
+    name: "changeme"
+  - username: "user2"
+    password: "anotherpass"
+    role: "user"
+    name: "User Two"
+# Add more users below following the same format.
+# - username: "user3"
+#   password: "yetanotherpass"
+#   role: "user"
+#   name: "User Three"

@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from contextlib import nullcontext
 try:
     import sounddevice as sd
     import soundfile as sf
@@ -25,6 +26,7 @@ except ImportError:
     Console = None
     Live = None
     Table = None
+import subprocess
 
 def transcribe_audio_file(audio_path, model_size="small", diarization=False, vad=False, output_format="txt"):
     """
@@ -131,6 +133,29 @@ def stream_microphone_transcription(output_path, model_size="small", diarization
             f.write(transcript)
     return transcript, metadata
 
+def start_cloudflared_tunnel(port=3773):
+    process = subprocess.Popen(
+        ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True
+    )
+    public_url = None
+    for line in process.stdout:
+        if "trycloudflare.com" in line:
+            print(line, end="")
+            if not public_url:
+                import re
+                m = re.search(r'(https://[\w\-]+\.trycloudflare.com)', line)
+                if m:
+                    public_url = m.group(1)
+                    print(f"[Cloudflared] Public URL: {public_url}")
+        elif "failed to sufficiently increase receive buffer size" in line:
+            continue  # Suppress this warning
+        else:
+            print(line, end="")
+    return public_url
+
 def main():
     """
     Main CLI entrypoint for document/audio analysis and RAG/LLM workflow.
@@ -155,6 +180,7 @@ def main():
     parser.add_argument('--vad', action='store_true', help='Enable voice activity detection (VAD)')
     parser.add_argument('--output-format', choices=['txt', 'json'], default='txt', help='Transcription output format')
     parser.add_argument('--defaults', action='store_true', help='Bypass data source and use default values for all variables')
+    parser.add_argument('--remotetunnel', action='store_true', help='Start a Cloudflare tunnel for remote access (like koboldcpp)')
     parser.set_defaults(disable_cuda=False)  # Default: CUDA ON
     args = parser.parse_args()
     sources = [s for s in [args.audio, args.mic] if s]

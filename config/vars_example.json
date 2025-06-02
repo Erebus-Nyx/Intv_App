@@ -1,0 +1,16 @@
+{
+  "example_var": {
+    "type": "string",
+    "default": "example value",
+    "description": "Describe the purpose of this variable here. Use this file as a template for creating your own <module>_vars.json files. Do not include this file in production or runtime environments.",
+    "required": true,
+    "hint": "A helpful hint for the user about this variable."
+  },
+  "another_var": {
+    "type": "int",
+    "default": 42,
+    "description": "Another example variable. Replace with your actual variable definitions.",
+    "required": false,
+    "hint": "This is just an example."
+  }
+}

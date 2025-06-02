@@ -26,21 +26,13 @@ external_rag: false
 # Purge variables from the database on run (true/false)
 purge_variables: false
 
-# Default user for web GUI login
-# If unchanged, the default is: username: admin, password: password123
-# Set these to secure values in production!
-default_user:
-  username: "admin"
-  password: "password123"
-  role: "admin"
-  name: "User"
-# You can add more users below (for future multi-user support)
-# users:
-#   - username: "user1"
-#     password: "changeme"
-#     role: "user"
-#     name: "user"
-
+#
+# Multi-user login info is now stored in config/users.yaml.
+# To enable multi-user support, edit config/users.yaml and add users as needed.
+# The default_user above is ignored if users.yaml exists and is non-empty.
+#
+# You can remove the default_user block above if you want to require users.yaml for all logins.
+#
 # Add more global settings as needed below.
 # For example:
 # default_language: "en"

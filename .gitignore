@@ -127,3 +127,14 @@ workspace/
 
 # End of .gitignore
 /.venv
+
+# Ignore all module vars.json files except the example
+config/*_vars.json
+!config/vars_example.json
+
+# Ignore policy_prompt.yaml except the example
+config/policy_prompt.yaml
+!config/policy_prompt_example.yaml
+
+# Ignore users.yaml except the example
+config/users.yaml

@@ -7,7 +7,7 @@ WebSocket-enabled FastAPI GUI for python-cli-app
 """
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, Form, Cookie, status, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -47,10 +47,13 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 api_v1 = APIRouter(prefix="/api/v1")
 
-@api_v1.get("/", response_class=HTMLResponse)
+@api_v1.get("/", response_class=JSONResponse)
 def index():
-    with open(static_dir / "index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    return {"status": "ok", "message": "API root. See /docs for documentation."}
+
+@api_v1.get("/health", response_class=JSONResponse)
+def health():
+    return {"status": "ok", "message": "API is healthy."}
 
 # Add support for loading users from config or environment
 
@@ -268,7 +271,26 @@ async def run_cli(
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# New endpoint to expose Cloudflare public URL
+@api_v1.get("/cloudflared_url", response_class=JSONResponse)
+def cloudflared_url():
+    url_path = "/tmp/cloudflared_url.txt"
+    if os.path.exists(url_path):
+        with open(url_path, "r") as f:
+            url = f.read().strip()
+        if url:
+            return {"cloudflared_url": url}
+    return {"cloudflared_url": None, "error": "URL not available yet"}
+
 app.include_router(api_v1)
+
+@app.get("/", include_in_schema=False)
+def root():
+    # Serve the GUI static index.html
+    static_index = static_dir / "index.html"
+    if static_index.exists():
+        return FileResponse(str(static_index), media_type="text/html")
+    return RedirectResponse(url="/api/v1/")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 3773))

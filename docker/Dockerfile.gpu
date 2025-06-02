@@ -7,6 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-venv \
     tesseract-ocr libgl1-mesa-glx poppler-utils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
@@ -16,14 +17,12 @@ RUN pip3 install --upgrade pip && pip3 install -r requirements.txt
 # Install FastAPI, Uvicorn, and WebSockets dependencies
 RUN pip3 install fastapi uvicorn[standard] websockets
 
+# Install Cloudflared (static binary from Cloudflare)
+RUN curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared \
+    && chmod +x /usr/local/bin/cloudflared
+
 # Copy the rest of the application
 COPY . .
-
-# Load environment variables from .env if present
-# ENV_FILE=.env
-# if [ -f "$ENV_FILE" ]; then
-#     export $(grep -v '^#' $ENV_FILE | xargs)
-# fi
 
 # Set environment variables for CUDA
 ENV CUDA_VISIBLE_DEVICES=0
@@ -35,5 +34,6 @@ ENV APP_ADMIN_PASS=password123
 # Expose the GUI port for NGINX/Cloudflare proxy
 EXPOSE 3773
 
-# Default command: run the FastAPI GUI app (can override for CLI)
+# Default command: run FastAPI/Uvicorn directly
 CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4"]
+

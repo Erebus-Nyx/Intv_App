@@ -1,29 +1,46 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-CONFIG_FILE="/mnt/g/WSL/nyx/workspace/python-cli-app/config/config.cloudflare.yaml"
-GUI_OUTPUT="/mnt/g/WSL/nyx/web-apps/interview summary.json"
+CONFIG_FILE="./config/config.cloudflare.yaml"
+GUI_OUTPUT="./web-apps/interview summary.json"
 
 # Function to extract tunnel value from YAML
-tunnel_name=$(grep '^tunnel:' "$CONFIG_FILE" | awk '{print $2}' | xargs)
-
-if [[ -n "$tunnel_name" ]]; then
-    echo "[cloudflared-test] Found tunnel: $tunnel_name. Starting cloudflared with defined tunnel."
-    cloudflared tunnel run "$tunnel_name"
-else
-    echo "[cloudflared-test] No tunnel defined. Starting free cloudflared tunnel..."
-    # Start a free tunnel and capture the output
-    output=$(cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/cloudflared.log)
-    # Extract the assigned public URL from the output
-    assigned_url=$(echo "$output" | grep -Eo 'https://[a-z0-9\-]+\.trycloudflare.com')
-    if [[ -n "$assigned_url" ]]; then
-        echo "[cloudflared-test] Assigned public URL: $assigned_url"
-        # Output to CLI
-        echo "Cloudflared public URL: $assigned_url"
-        # Output to GUI (write to a JSON file for GUI to read)
-        echo "{\"cloudflared_url\": \"$assigned_url\"}" > "$GUI_OUTPUT"
-    else
-        echo "[cloudflared-test] Failed to obtain public URL from cloudflared output."
-        exit 1
-    fi
+# POSIX-compliant shell: use grep/sed/awk, avoid [[ ... ]]
+tunnel_name=""
+if [ -f "$CONFIG_FILE" ]; then
+    tunnel_name=$(grep '^tunnel:' "$CONFIG_FILE" | awk '{print $2}' | xargs)
 fi
+
+# Default: do not enable cloudflare unless --cloudflare is present
+CLOUDFLARE_ENABLED="false"
+
+# Parse CLI args for --cloudflare
+for arg in "$@"; do
+    if [ "$arg" = "--cloudflare" ]; then
+        CLOUDFLARE_ENABLED="true"
+    fi
+    if [ "$arg" = "--no-cloudflare" ]; then
+        CLOUDFLARE_ENABLED="false"
+    fi
+    if [ "$arg" = "--cloudflare-env" ]; then
+        CLOUDFLARE_ENABLED=$(echo "$USE_CLOUDFLARE_TUNNEL" | tr '[:upper:]' '[:lower:]')
+    fi
+done
+
+if [ "$CLOUDFLARE_ENABLED" = "true" ]; then
+    if [ -n "$tunnel_name" ]; then
+        echo "[cloudflared-test] Found tunnel: $tunnel_name. Starting cloudflared with defined tunnel."
+        cloudflared tunnel run "$tunnel_name" &
+    else
+        # Create a minimal config file to suppress warning
+        mkdir -p ./config/cloudflared
+        echo "tunnel: free" > ./config/cloudflared/config.yml
+        echo "url: http://localhost:3773" >> ./config/cloudflared/config.yml
+        echo "[cloudflared-test] No tunnel defined or config missing. Starting free cloudflared tunnel with dummy config..."
+        cloudflared tunnel --config ./config/cloudflared/config.yml --url http://localhost:3773 2>&1 | tee ./web-apps/cloudflared.log &
+    fi
+    sleep 2
+fi
+
+# Start the main app (uvicorn)
+exec uvicorn src.modules.gui.app:app --host 0.0.0.0 --port 3773 --workers 4

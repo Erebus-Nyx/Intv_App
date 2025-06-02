@@ -2,46 +2,33 @@
 
 set -e
 
-# Paths
-COMPOSE_FILE="docker/docker-compose.yml"
-CLOUDFLARED_ENTRYPOINT="scripts/cloudflared-entrypoint.sh"
-APP_PORT=3773
+# Use env vars or defaults for host/port
+API_HOST="${API_HOST:-0.0.0.0}"
+API_PORT="${API_PORT:-3773}"
 
-# Ensure entrypoint is executable
-chmod +x "$CLOUDFLARED_ENTRYPOINT"
+# Start FastAPI app in the background
+uvicorn src.modules.gui.app:app --host "$API_HOST" --port "$API_PORT" --workers 4 &
+FASTAPI_PID=$!
 
-echo "[INFO] Entrypoint script is executable."
+# Start cloudflared with a random tunnel and capture output
+CLOUDFLARED_LOG=/tmp/cloudflared.log
+cloudflared tunnel --url http://localhost:$API_PORT 2>&1 | tee $CLOUDFLARED_LOG &
+CLOUDFLARED_PID=$!
 
-# Rebuild and restart containers
-docker compose -f "$COMPOSE_FILE" down
-docker compose -f "$COMPOSE_FILE" up -d --build
+# Wait for cloudflared to print the public URL, then announce it in the logs
+(
+  while ! grep -qE 'https://[a-z0-9\-]+\.trycloudflare.com' $CLOUDFLARED_LOG; do sleep 1; done
+  LINK=$(grep -Eo 'https://[a-z0-9\-]+\.trycloudflare.com' $CLOUDFLARED_LOG | head -1)
+  echo "$LINK" > /tmp/cloudflared_url.txt
+  echo "\n==============================="
+  echo "Cloudflared public URL: $LINK"
+  echo "Local API listening at: http://$API_HOST:$API_PORT/app/v1"
+  echo "API docs (Swagger UI): http://$API_HOST:$API_PORT/docs"
+  echo "Cloudflared API endpoint: $LINK/app/v1"
+  echo "Cloudflared API docs: $LINK/docs"
+  echo "===============================\n"
+) &
 
-echo "[INFO] Containers rebuilt and started."
-
-# Wait for services to be up
-sleep 5
-
-# Print app info
-echo "---- App Info ----"
-echo "App is listening on: http://localhost:$APP_PORT (inbound: 0.0.0.0:$APP_PORT)"
-echo "WebSocket endpoint: ws://localhost:$APP_PORT/api/v1/ws"
-echo "API base URL: http://localhost:$APP_PORT/api/v1/docs"
-echo "App request endpoint (admin only): POST http://localhost:$APP_PORT/api/v1/admin/run-cli"
-echo "Compatibility API: (Check your FastAPI OpenAPI docs for available endpoints)"
-
-# Print Cloudflare info, even if not in logs
-CF_CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q cloudflared-test)
-CF_LOG=$(docker logs "$CF_CONTAINER" 2>&1 | grep -Eo 'https://[a-zA-Z0-9.-]+\\.trycloudflare\\.com' | tail -n1)
-
-if [ -n "$CF_LOG" ]; then
-    echo "Cloudflare public URL: $CF_LOG"
-    echo "Accessible API: $CF_LOG/api/v1/docs"
-    echo "Accessible WebSocket: ${CF_LOG/https:/wss:}/api/v1/ws"
-else
-    echo "Cloudflare tunnel URL not found in logs."
-    echo "If you know your tunnel domain, access: https://<your-tunnel>.trycloudflare.com"
-    echo "Accessible API: https://<your-tunnel>.trycloudflare.com/api/v1/docs"
-    echo "Accessible WebSocket: wss://<your-tunnel>.trycloudflare.com/api/v1/ws"
-fi
-
-echo "-------------------"
+# Wait for FastAPI and cloudflared to exit
+wait $FASTAPI_PID
+wait $CLOUDFLARED_PID

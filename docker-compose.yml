@@ -1,17 +1,22 @@
 networks:
   vLAN:
-    external: true
+     external: true
+
 
 services:
   intv_app:
     build:
       context: .
       dockerfile: docker/Dockerfile.gpu
-    image: intv-app-gpu
+    # erebusnyx/intv-app-gpu:latest
+    image: docker.io/library/intv-app-gpu:latest
     container_name: intv_app
+    restart: unless-stopped
+    stdin_open: true
     tty: true
     env_file:
       - .env
+    shm_size: '2gb'
     environment:
       # LLM and RAG config (override with your own env or .env file)
       LLM_API_BASE: ${LLM_API_BASE:-http://localhost}
@@ -26,7 +31,8 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-""}
       CF_AUD: ${CF_AUD}
       APP_ADMIN_USER: ${APP_ADMIN_USER:-admin}
-      APP_ADMIN_PASS: ${APP_ADMIN_PASS:-admin}
+      APP_ADMIN_PASS: ${APP_ADMIN_PASS:-password1234}
+      # USE_CLOUDFLARE_TUNNEL: ${USE_CLOUDFLARE_TUNNEL:-0}  # Removed to ensure .env is used
     volumes:
       - ./config:/app/config
       - ./src:/app/src
@@ -38,37 +44,25 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    ports:
+      - 3773:3773
+    networks:
+      vLAN:
+        aliases:
+          - intv_app
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3773/whoami"]
+      test: ["CMD", "curl", "-f", "http://localhost:3773/api/v1/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks:
-      vLAN:
+    entrypoint: ["/app/scripts/cloudflared-entrypoint.sh"]
 
-  cloudflared-test:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared-test
-    restart: unless-stopped
-    env_file:
-      - .env
-    volumes:
-      - ./scripts/cloudflared-entrypoint.sh:/entrypoint.sh:ro
-      - ./config/config.cloudflare.yaml:/config/config.cloudflare.yaml:ro
-    environment:
-      NO_TLS_VERIFY: "true"
-      NO_AUTOUPDATE: "true"
-      # Optionally allow config path override
-      CLOUDFLARED_CONFIG: ${CLOUDFLARED_CONFIG:-/config/config.cloudflare.yaml}
-    entrypoint: ["/entrypoint.sh"]
-    networks:
-      vLAN:
-    depends_on:
-      - intv_app
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep cloudflared || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+
+
+
