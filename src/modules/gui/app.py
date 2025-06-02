@@ -27,11 +27,18 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import shutil
 from fastapi import APIRouter
 import yaml
+import threading
 
 # Secret key for session cookies
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_urlsafe(32))
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, session_cookie="session")
+
+# Set session cookie policy based on environment
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+if SESSION_COOKIE_SECURE:
+    app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, session_cookie="session", same_site="none", https_only=True)
+else:
+    app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, session_cookie="session", same_site="lax", https_only=False)
 
 # Allow CORS for Cloudflare tunnel and local dev
 app.add_middleware(
@@ -49,61 +56,39 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 api_v1 = APIRouter(prefix="/api/v1")
 
 @api_v1.get("/", response_class=JSONResponse)
-def index():
-    return {"status": "ok", "message": "API root. See /docs for documentation."}
+def api_v1_root():
+    return {"status": "ok", "message": "API v1 root. See /api/v1/docs for documentation."}
 
 @api_v1.get("/health", response_class=JSONResponse)
 def health():
     return {"status": "ok", "message": "API is healthy."}
 
-# Add support for loading users from config or environment
+# Remove all user/role/multi-user logic
+CURRENT_ADMIN = False
 
-def get_users_from_config():
-    config = load_config()
-    users = {}
-    # Default user from config
-    default_user = config.get('default_user', {})
-    if default_user:
-        users[default_user.get('username', 'admin')] = {
-            'password': default_user.get('password', 'password123'),
-            'role': default_user.get('role', 'admin'),
-            'name': default_user.get('name', 'User')
-        }
-    # Additional users (future multi-user support)
-    for user in config.get('users', []):
-        users[user['username']] = {
-            'password': user['password'],
-            'role': user.get('role', 'user'),
-            'name': user.get('name', user['username'])
-        }
-    # ENV override (for admin)
-    env_user = os.environ.get('APP_ADMIN_USER')
-    env_pass = os.environ.get('APP_ADMIN_PASS')
-    env_name = os.environ.get('APP_ADMIN_NAME', env_user or 'Admin')
-    if env_user and env_pass:
-        users[env_user] = {'password': env_pass, 'role': 'admin', 'name': env_name}
-    return users
+@api_v1.post("/admin_login")
+async def admin_login():
+    global CURRENT_ADMIN
+    CURRENT_ADMIN = True
+    return {"status": "ok", "admin": True}
 
-def get_users_from_yaml():
-    users_yaml_path = Path(__file__).parent.parent.parent / "config" / "users.yaml"
-    users = {}
-    if users_yaml_path.exists():
-        with open(users_yaml_path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
-            for user in data.get('users', []):
-                users[user['username']] = {
-                    'password': user['password'],
-                    'role': user.get('role', 'user'),
-                    'name': user.get('name', user['username'])
-                }
-    return users
+@api_v1.post("/admin_logout")
+async def admin_logout():
+    global CURRENT_ADMIN
+    CURRENT_ADMIN = False
+    return {"status": "ok", "admin": False}
 
-# Replace USERS with users loaded from users.yaml
-USERS = get_users_from_yaml()
+@api_v1.get("/whoami")
+async def whoami():
+    global CURRENT_ADMIN
+    return {"admin": CURRENT_ADMIN}
 
-# Add function to add users at runtime (in-memory only)
-def add_user(username, password, role='user'):
-    USERS[username] = {'password': password, 'role': role}
+# Update is_admin to check CURRENT_ADMIN
+def is_admin():
+    global CURRENT_ADMIN
+    if not CURRENT_ADMIN:
+        raise JSONResponse({"error": "Admin access required"}, status_code=403)
+    return True
 
 # Cloudflare Access JWT public keys endpoint
 CF_JWT_KEYS_URL = "https://YOUR_DOMAIN.cloudflareaccess.com/cdn-cgi/access/certs"
@@ -142,114 +127,51 @@ async def get_current_user(request: Request) -> Optional[str]:
             return payload.get("email") or payload.get("sub")
     return None
 
-# Login endpoint
-@api_v1.post("/login")
-async def login(request: Request, response: Response, username: str = Form(...), password: str = Form(...)):
-    user = USERS.get(username)
-    if user and user['password'] == password:
-        request.session["user"] = username
-        request.session["role"] = user.get('role', 'user')
-        request.session["name"] = user.get('name', username)
-        response = RedirectResponse(url="/api/v1/", status_code=status.HTTP_302_FOUND)
-        return response
-    return JSONResponse({"error": "Invalid credentials"}, status_code=401)
+# Helper to check if admin is using default password
+DEFAULT_ADMIN_USER = "admin"
+DEFAULT_ADMIN_PASS = "admin"
+USERS_YAML_PATH = Path("/app/config/users.yaml")
 
-# Logout endpoint
-@api_v1.get("/logout")
-async def logout(request: Request, response: Response):
-    request.session.clear()
-    response = RedirectResponse(url="/api/v1/", status_code=status.HTTP_302_FOUND)
-    response.delete_cookie("session")
-    response.delete_cookie("user")
-    return response
+# Helper to update users.yaml
+users_yaml_lock = threading.Lock()
+def update_user_password_in_yaml(username, new_password):
+    with users_yaml_lock:
+        if USERS_YAML_PATH.exists():
+            with open(USERS_YAML_PATH, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            user_list = data.get('users', [])
+            for user in user_list:
+                if user['username'] == username:
+                    user['password'] = new_password
+            data['users'] = user_list
+            with open(USERS_YAML_PATH, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(data, f, allow_unicode=True)
 
-# Whoami endpoint
+# Remove/disable login and session logic
+# Add a global CURRENT_USER variable
+CURRENT_USER = None
+
+@api_v1.post("/set_user")
+async def set_user(name: str = Form(...)):
+    global CURRENT_USER
+    CURRENT_USER = name.strip()
+    return {"status": "ok", "user": CURRENT_USER}
+
 @api_v1.get("/whoami")
-async def whoami(user: Optional[str] = Depends(get_current_user)):
-    # Allow unauthenticated healthcheck: if no user, return a simple healthy response
-    if user:
-        user_obj = USERS.get(user)
-        return {"user": user, "name": user_obj.get("name", user), "role": user_obj.get("role", "user")}
-    # For healthcheck, return 200 with minimal info
-    return {"status": "ok", "user": None}
+async def whoami():
+    global CURRENT_USER
+    return {"user": CURRENT_USER}
 
-# WebSocket endpoint for real-time workflow
-@api_v1.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    # Authenticate: check session or Cloudflare JWT
-    session_cookie = websocket.cookies.get("session")
-    cf_jwt = websocket.headers.get("Cf-Access-Jwt-Assertion") or websocket.cookies.get("CF_Authorization")
-    user = None
-    if session_cookie:
-        user = websocket.cookies.get("user")
-    elif cf_jwt:
-        payload = verify_cf_jwt(cf_jwt)
-        if payload:
-            user = payload.get("email") or payload.get("sub")
-    if not user:
-        await websocket.close(code=4401)
-        return
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_text()
-            req = json.loads(data)
-            if req.get("type") == "start_workflow":
-                modules = [
-                    "intv_adult", "intv_child", "intv_ar", "intv_col",
-                    "homeassess", "allegations", "close_dispo", "close_ea", "close_staffing"
-                ]
-                await websocket.send_json({"type": "modules", "modules": modules})
-            elif req.get("type") == "run_module":
-                module = req.get("module")
-                input_data = req.get("input", {})
-                use_defaults = req.get("defaults", False)
-                await websocket.send_json({"type": "progress", "msg": f"Running {module}...", "percent": 5})
-                try:
-                    mod = importlib.import_module(f"src.modules.{module}")
-                    output_func = getattr(mod, f"{module}_output")
-                    # If use_defaults, load config and pass all defaults as input
-                    if use_defaults:
-                        config_path = Path(__file__).parent.parent.parent / "config" / f"{module}_vars.json"
-                        with open(config_path, "r", encoding="utf-8") as f:
-                            logic_tree = json.load(f)
-                        input_data = {var: meta.get("default", "") for var, meta in logic_tree.items()}
-                    # Simulate progress
-                    await websocket.send_json({"type": "progress", "msg": "Processing input...", "percent": 30})
-                    result = output_func(lookup_id=None, output_path=None, **{f"{module.split('_')[0]}_data": input_data})
-                    await websocket.send_json({"type": "progress", "msg": "Finalizing...", "percent": 90})
-                    await websocket.send_json({
-                        "type": "result",
-                        "narrative": result.get("narrative", ""),
-                        "clarification_needed": result.get("clarification_needed", False),
-                        "pending_questions": result.get("pending_questions", []),
-                        "is_final": result.get("is_final", False)
-                    })
-                except Exception as e:
-                    await websocket.send_json({"type": "error", "msg": f"Error running module: {str(e)}"})
-            elif req.get("type") == "recording":
-                # Simulate recording indicator
-                await websocket.send_json({"type": "recording", "active": req.get("active", False)})
-            else:
-                await websocket.send_json({"type": "error", "msg": "Unknown request type."})
-    except WebSocketDisconnect:
-        pass
+# Update is_admin to check CURRENT_USER
+def is_admin():
+    global CURRENT_USER
+    if CURRENT_USER != "admin":
+        raise JSONResponse({"error": "Admin access required"}, status_code=403)
+    return CURRENT_USER
 
-# API to add users (for testing, in-memory only)
-@api_v1.post("/add_user")
-async def add_user_api(username: str = Form(...), password: str = Form(...), role: str = Form('user'), name: str = Form(None)):
-    add_user(username, password, role)
-    if name:
-        USERS[username]['name'] = name
-    return {"status": "success", "user": username, "role": role, "name": USERS[username].get('name', username)}
+# Only admin endpoints use is_admin()
 
 security = HTTPBasic()
-
-# Restrict CLI emulation endpoint to admin users only
-def is_admin(user: Optional[str] = Depends(get_current_user)):
-    if not user or USERS.get(user, {}).get('role') != 'admin':
-        raise JSONResponse({"error": "Admin access required"}, status_code=403)
-    return user
 
 # Allowed file types and safe directory
 ALLOWED_TYPES = {"pdf", "docx", "txt", "mp3", "wav", "mp4", "m4a"}
@@ -301,11 +223,11 @@ app.include_router(api_v1)
 
 @app.get("/", include_in_schema=False)
 def root():
-    # Serve the GUI static index.html
+    # Serve the GUI static index.html as the default landing page
     static_index = static_dir / "index.html"
     if static_index.exists():
         return FileResponse(str(static_index), media_type="text/html")
-    return RedirectResponse(url="/api/v1/")
+    return JSONResponse({"error": "index.html not found"}, status_code=404)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 3773))

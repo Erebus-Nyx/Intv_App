@@ -29,11 +29,11 @@ ENV CUDA_VISIBLE_DEVICES=0
 
 # Add environment variables for admin user (can be set at runtime)
 ENV APP_ADMIN_USER=admin
-ENV APP_ADMIN_PASS=password123
+ENV APP_ADMIN_PASS=admin
 
 # Expose the GUI port for NGINX/Cloudflare proxy
 EXPOSE 3773
 
 # Default command: run FastAPI/Uvicorn directly
-CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4"]
+CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips=*"]
 

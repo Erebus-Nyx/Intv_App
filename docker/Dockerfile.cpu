@@ -37,15 +37,15 @@ RUN pip install --upgrade pip && \
 # Copy application code
 COPY . .
 
+# Set environment variables for admin user (can be set at runtime)
+ENV APP_ADMIN_USER=admin
+ENV APP_ADMIN_PASS=admin
+
 # Expose the GUI port for NGINX/Cloudflare proxy
 EXPOSE 3773
 
-# Set environment variables for admin user (can be set at runtime)
-ENV APP_ADMIN_USER=admin
-ENV APP_ADMIN_PASS=password123
-
-# Set entrypoint for FastAPI GUI app (can override for CLI)
-CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4"]
+# Default command: run FastAPI/Uvicorn directly with proxy headers
+CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips=*"]
 
 # Notes:
 # - This image is compatible with x86 and ARM (Raspberry Pi) architectures.

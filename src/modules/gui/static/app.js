@@ -51,59 +51,91 @@ function connectWS(customUrl) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Remove user selector logic
+  document.getElementById('app').style.display = '';
+
+  // Add Admin Login/Logout button
+  const adminDiv = document.createElement('div');
+  adminDiv.style.marginBottom = '1em';
+  adminDiv.innerHTML = `
+    <button id="adminLoginBtn">Admin Login</button>
+    <button id="adminLogoutBtn" style="display:none;">Admin Logout</button>
+    <span id="adminStatus"></span>
+  `;
+  document.getElementById('app').prepend(adminDiv);
+
+  async function refreshAdmin() {
+    const resp = await fetch('/api/v1/whoami');
+    const data = await resp.json();
+    if (data.admin) {
+      document.getElementById('adminPanel').style.display = '';
+      document.getElementById('adminLoginBtn').style.display = 'none';
+      document.getElementById('adminLogoutBtn').style.display = '';
+      document.getElementById('adminStatus').textContent = ' (Admin mode)';
+    } else {
+      document.getElementById('adminPanel').style.display = 'none';
+      document.getElementById('adminLoginBtn').style.display = '';
+      document.getElementById('adminLogoutBtn').style.display = 'none';
+      document.getElementById('adminStatus').textContent = '';
+    }
+  }
+
+  document.getElementById('adminLoginBtn').onclick = async () => {
+    await fetch('/api/v1/admin_login', { method: 'POST' });
+    await refreshAdmin();
+  };
+  document.getElementById('adminLogoutBtn').onclick = async () => {
+    await fetch('/api/v1/admin_logout', { method: 'POST' });
+    await refreshAdmin();
+  };
+
+  refreshAdmin();
+
+  // Password show/hide toggle with SVG eye icons
+  const passwordInput = document.getElementById('password');
+  const togglePassword = document.getElementById('togglePassword');
+  if (togglePassword && passwordInput) {
+    const eyeOpen = document.getElementById('eyeOpen');
+    const eyeClosed = document.getElementById('eyeClosed');
+    let shown = false;
+    togglePassword.addEventListener('click', function() {
+      shown = !shown;
+      passwordInput.setAttribute('type', shown ? 'text' : 'password');
+      if (shown) {
+        eyeOpen.style.display = 'none';
+        eyeClosed.style.display = '';
+        togglePassword.setAttribute('aria-label', 'Hide password');
+      } else {
+        eyeOpen.style.display = '';
+        eyeClosed.style.display = 'none';
+        togglePassword.setAttribute('aria-label', 'Show password');
+      }
+    });
+  }
+
   // Check authentication
-  fetch('/whoami').then(async r => {
+  fetch('/api/v1/whoami', { credentials: 'same-origin' }).then(async r => {
     if (r.ok) {
       const data = await r.json();
-      document.getElementById('loginPanel').style.display = 'none';
-      document.getElementById('app').style.display = '';
-      connectWS();
-      // --- Admin CLI Panel ---
-      if (data.role === 'admin') {
-        document.getElementById('adminPanel').style.display = '';
+      if (data.user || data.role) {
+        document.getElementById('loginPanel').style.display = 'none';
+        document.getElementById('app').style.display = '';
+        connectWS();
+        // --- Admin CLI Panel ---
+        if (data.role === 'admin') {
+          document.getElementById('adminPanel').style.display = '';
+        }
+      } else {
+        document.getElementById('loginPanel').style.display = '';
+        document.getElementById('app').style.display = 'none';
       }
     } else {
       document.getElementById('loginPanel').style.display = '';
       document.getElementById('app').style.display = 'none';
     }
-  });
-
-  document.getElementById('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('password', password);
-    const loginBtn = document.querySelector('#loginForm button[type="submit"]');
-    if (loginBtn) {
-      loginBtn.disabled = true;
-      loginBtn.textContent = 'Logging in...';
-    }
-    document.getElementById('loginError').style.display = 'none';
-    try {
-      const resp = await fetch('/api/v1/login', { method: 'POST', body: formData, credentials: 'same-origin' });
-      if (resp.redirected || resp.ok) {
-        document.getElementById('loginError').style.display = 'none';
-        location.reload();
-      } else {
-        let err = 'Login failed';
-        try {
-          const data = await resp.json();
-          err = data.error || err;
-        } catch {}
-        document.getElementById('loginError').textContent = err;
-        document.getElementById('loginError').style.display = '';
-      }
-    } catch (e) {
-      document.getElementById('loginError').textContent = 'Network error. Please try again.';
-      document.getElementById('loginError').style.display = '';
-    } finally {
-      if (loginBtn) {
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Login';
-      }
-    }
+  }).catch(() => {
+    document.getElementById('loginPanel').style.display = '';
+    document.getElementById('app').style.display = 'none';
   });
 
   document.getElementById('logoutBtn').onclick = () => {

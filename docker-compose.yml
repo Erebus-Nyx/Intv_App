@@ -19,24 +19,18 @@ services:
     shm_size: '2gb'
     environment:
       # LLM and RAG config (override with your own env or .env file)
-      LLM_API_BASE: ${LLM_API_BASE:-http://localhost}
-      LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_API_PORT: ${LLM_API_PORT:-11434}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       MODEL: ${MODEL:-hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M}
-      EXTERNAL_RAG: ${EXTERNAL_RAG:-false}
-      PURGE_VARIABLES: ${PURGE_VARIABLES:-false}
-      NAME: ${NAME:-admin}
-      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
-      SESSION_SECRET: ${SESSION_SECRET:-""}
-      CF_AUD: ${CF_AUD}
-      #APP_ADMIN_USER: ${APP_ADMIN_USER:-admin}
-      #APP_ADMIN_PASS: ${APP_ADMIN_PASS:-password1234}
-      # USE_CLOUDFLARE_TUNNEL: ${USE_CLOUDFLARE_TUNNEL:-0}  # Removed to ensure .env is used
+      EXTERNAL_RAG: ${EXTERNAL_RAG:-false}  # Set to 'true' to enable external RAG, 'false' to disable
+      PURGE_VARIABLES: ${PURGE_VARIABLES:-false}  # Set to 'true' to enable purging, 'false' to disable
+      SESSION_COOKIE_SECURE: false # Force non-secure cookie for troubleshooting
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-admin}
     volumes:
       - ./config:/app/config
       - ./src:/app/src
-      - ./requirements.txt:/app/requirements.txt
+      - ./scripts:/app/scripts
     deploy:
       resources:
         reservations:
