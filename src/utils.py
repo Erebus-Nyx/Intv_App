@@ -67,7 +67,7 @@ def chunk_document(file_path: Path, filetype: str):
             try:
                 from pdf2image import convert_from_path
                 import pytesseract
-                from src.llm_db import get_module_variable_hints
+                from llm_db import get_module_variable_hints
             except ImportError:
                 raise ImportError('pdf2image and pytesseract are required for OCR. Please install them.')
             images = convert_from_path(str(file_path))
@@ -96,6 +96,9 @@ def chunk_document(file_path: Path, filetype: str):
         doc = docx.Document(str(file_path))
         text = "\n".join([para.text for para in doc.paragraphs])
         return [p.strip() for p in text.split('\n\n') if p.strip()]
+    elif filetype == 'jpg':
+        # Stub: return image path as a single chunk, or implement OCR if needed
+        return [str(file_path)]
     raise NotImplementedError(f"Chunking for {filetype} not implemented.")
 
 def get_default_transcribed_filename(extension="txt"):

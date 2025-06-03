@@ -3,11 +3,13 @@
 import os
 import requests
 import yaml
+import threading
+import time
 
 # Helper to load structured system/policy prompt from config/policy_prompt.yaml
 _DEF_POLICY_PROMPT = "You are a professional, neutral, and privacy-compliant assistant. Always follow organizational policy, never provide legal/medical advice, and always clarify when uncertain."
 def load_policy_prompt():
-    from src.config import load_config
+    from config import load_config
     config = load_config()
     # Try config.yaml first
     policy = config.get("system_prompt")
@@ -66,6 +68,7 @@ def analyze_chunks(rag_results, model, api_base=None, api_key=None, api_port=Non
     Returns:
         LLM response as string or dict.
     """
+    policy = load_policy_prompt()
     if isinstance(rag_results, list):
         prompt = '\n---\n'.join(rag_results)
     else:
@@ -76,60 +79,93 @@ def analyze_chunks(rag_results, model, api_base=None, api_key=None, api_port=Non
         api_port = os.environ.get('LLM_API_PORT', None)
     if not api_key:
         api_key = os.environ.get('LLM_API_KEY', None)
-    if provider == 'openai':
-        url = f"{api_base}/v1/chat/completions"
-        headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
-        data = {
-            'model': model,
-            'messages': [
-                {'role': 'system', 'content': policy},
-                {'role': 'user', 'content': prompt}
-            ],
-            'temperature': 0.7
-        }
-        if extra_params:
-            data.update(extra_params)
-        resp = requests.post(url, headers=headers, json=data)
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
-    elif provider == 'ollama':
-        # Ollama local API (default port 11434)
-        port = api_port or 11434
-        url = f"{api_base}:{port}/api/chat"
-        data = {
-            'model': model,
-            'messages': [
-                {'role': 'system', 'content': policy},
-                {'role': 'user', 'content': prompt}
-            ]
-        }
-        if extra_params:
-            data.update(extra_params)
-        # If CUDA requested, add 'options' for Ollama
-        if extra_params and extra_params.get('cuda'):
-            data.setdefault('options', {})['numa'] = False  # Example: set NUMA off for CUDA, or add other CUDA flags
-            data['options']['cuda'] = True
-        resp = requests.post(url, json=data)
-        resp.raise_for_status()
-        return resp.json().get('message', resp.text)
-    elif provider == 'koboldcpp':
-        # KoboldCpp API (default port 5001)
-        port = api_port or 5001
-        url = f"{api_base}:{port}/api/v1/generate"
-        # For text-only models, prepend policy to prompt
-        full_prompt = f"{policy}\n\n{prompt}"
-        data = {
-            'prompt': full_prompt,
-            'max_new_tokens': 512,
-            'mode': 'chat',
-            'character': 'User',
-            'context': '',
-            'model': model
-        }
-        if extra_params:
-            data.update(extra_params)
-        resp = requests.post(url, json=data)
-        resp.raise_for_status()
-        return resp.json().get('results', [{}])[0].get('text', resp.text)
-    else:
-        raise NotImplementedError(f"Provider '{provider}' not supported.")
+    # Ensure koboldcpp is always the default unless explicitly set to 'openai' or 'ollama'
+    if not provider or provider.lower() not in ('openai', 'ollama', 'koboldcpp'):
+        provider = 'koboldcpp'
+    # If provider is koboldcpp and no port is set, use 5001
+    if provider == 'koboldcpp' and not api_port:
+        api_port = 5001
+    # If provider is ollama and no port is set, use 11434
+    if provider == 'ollama' and not api_port:
+        api_port = 11434
+
+    # --- Verbose completion gauge ---
+    stop_gauge = threading.Event()
+    def gauge():
+        print('[LLM] Waiting for model completion:', end='', flush=True)
+        while not stop_gauge.is_set():
+            print('.', end='', flush=True)
+            time.sleep(2)
+        print(' done.')
+
+    gauge_thread = threading.Thread(target=gauge)
+    gauge_thread.start()
+    try:
+        if provider == 'openai':
+            url = f"{api_base}/v1/chat/completions"
+            headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+            data = {
+                'model': model,
+                'messages': [
+                    {'role': 'system', 'content': policy},
+                    {'role': 'user', 'content': prompt}
+                ],
+                'temperature': 0.7
+            }
+            if extra_params:
+                data.update(extra_params)
+            resp = requests.post(url, headers=headers, json=data, timeout=60)
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content']
+        elif provider == 'ollama':
+            port = api_port or 11434
+            url = f"{api_base}:{port}/api/chat"
+            data = {
+                'model': model,
+                'messages': [
+                    {'role': 'system', 'content': policy},
+                    {'role': 'user', 'content': prompt}
+                ],
+                'stream': False
+            }
+            if extra_params:
+                data.update(extra_params)
+            resp = requests.post(url, json=data, timeout=60)
+            resp.raise_for_status()
+            result = resp.json()
+            # Ollama chat returns {'message': ...}
+            return result.get('message') or result.get('response') or resp.text
+        elif provider == 'koboldcpp':
+            port = api_port or 5001
+            url = f"{api_base}:{port}/api/v1/generate"
+            full_prompt = f"{policy}\n\n{prompt}"
+            data = {
+                'prompt': full_prompt,
+                'max_new_tokens': 512,
+                'mode': 'chat',
+                'character': 'User',
+                'context': '',
+                'model': model
+            }
+            if extra_params:
+                data.update(extra_params)
+            try:
+                resp = requests.post(url, json=data, timeout=60)
+                resp.raise_for_status()
+                result = resp.json()
+                # Defensive: log and handle unexpected response
+                if 'results' in result and result['results']:
+                    return result['results'][0].get('text', str(result['results'][0]))
+                elif 'error' in result:
+                    return f"[koboldcpp ERROR] {result['error']}"
+                else:
+                    print(f"[koboldcpp WARNING] Unexpected response: {result}")
+                    return str(result)
+            except Exception as e:
+                print(f"[koboldcpp ERROR] {e}")
+                return f"[koboldcpp ERROR] {e}"
+        else:
+            raise NotImplementedError(f"Provider '{provider}' not supported.")
+    finally:
+        stop_gauge.set()
+        gauge_thread.join()

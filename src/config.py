@@ -6,8 +6,8 @@ CONFIG_PATH = Path(__file__).parent / 'config.json'
 DEFAULT_CONFIG = {
     "llm_api_base": "http://localhost",
     "llm_api_key": None,
-    "llm_api_port": 11434,
-    "llm_provider": "ollama",
+    "llm_api_port": 5001,  # Default to koboldcpp port
+    "llm_provider": "koboldcpp",  # Default to koboldcpp
     "model": "hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M",
     "external_rag": False,
     "purge_variables": False,

@@ -1,0 +1,22 @@
+{
+    "FA": "father",
+    "MO": "mother",
+    "GM": "grandmother",
+    "GF": "grandfather",
+    "MGF": "maternal grandfather",
+    "MGM": "maternal grandmother",
+    "PGF": "paternal grandfather",
+    "PGM": "paternal grandmother",
+    "OV": "oldest victim child",
+    "YV": "youngest victim child",
+    "AP": "alleged perpetrator",
+    "AV": "alleged victim",
+    "DV": "domestic violence",
+    "CPS": "Child Protective Services",
+    "LE": "law enforcement",
+    "SW": "social worker",
+    "GAL": "guardian ad litem",
+    "CASA": "court appointed special advocate",
+    "ICWA": "Indian Child Welfare Act",
+    "DFPS": "Department of Family and Protective Services"
+}

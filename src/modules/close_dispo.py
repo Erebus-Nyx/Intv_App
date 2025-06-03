@@ -7,8 +7,8 @@ Implements Compile_Dispo logic as a function (stub for now, expand as needed).
 import json
 import os
 from pathlib import Path
-from src.llm_db import get_llm_variable, set_llm_variable
-from src.config import load_config
+from llm_db import get_llm_variable, set_llm_variable
+from config import load_config
 
 def resolve_variables(lookup_id, logic_tree, db_lookup, user_prompt, provided=None):
     resolved = {}

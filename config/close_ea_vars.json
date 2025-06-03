@@ -1,8 +1,0 @@
-{
-  "EAType": {"default": "", "hint": "Type of emergency action"},
-  "Date": {"default": "", "hint": "Date of emergency action"},
-  "Worker": {"default": "", "hint": "Name of worker"},
-  "WorkerRole": {"default": "", "hint": "Role of worker (e.g. investigator, supervisor)"},
-  "Summary": {"default": "", "hint": "Summary of emergency action and closing"},
-  "NextSteps": {"default": "", "hint": "Next steps or recommendations"}
-}

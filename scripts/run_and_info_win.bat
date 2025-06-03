@@ -44,7 +44,8 @@ if "%1"=="--exit" (
             )
         )
     )
-    for %%F in (intvapp_fastapi_*.pid intvapp_cloudflared_*.pid) do (
+    REM Also kill any background FastAPI or cloudflared started by this script (using PID files)
+    for %%F in (%TEMP%\intvapp_fastapi_*.pid %TEMP%\intvapp_cloudflared_*.pid) do (
         if exist %%F (
             set /p PID=<%%F
             taskkill /F /PID !PID! >nul 2>&1
@@ -53,19 +54,6 @@ if "%1"=="--exit" (
     )
     echo All relevant processes stopped.
     exit /b 0
-)
-
-REM Handle --startup argument for WSL ~/.bashrc registration
-if "%1"=="--startup" (
-    if "%2"=="true" (
-        bash -c "grep -q 'run_and_info_win.bat' ~/.bashrc || echo 'bash /mnt/g/WSL/nyx/workspace/Intv_App/scripts/run_and_info_win.bat' >> ~/.bashrc"
-        echo Registered run_and_info_win.bat in ~/.bashrc for WSL startup.
-        exit /b 0
-    ) else if "%2"=="false" (
-        bash -c "sed -i '/run_and_info_win.bat/d' ~/.bashrc"
-        echo Removed run_and_info_win.bat from ~/.bashrc startup.
-        exit /b 0
-    )
 )
 
 REM Try to free 3773, else use 3774
@@ -97,13 +85,24 @@ if errorlevel 1 (
     set CLOUDFLARED_BIN=%CLOUDFLARED_LOCAL%
 )
 
-REM Start FastAPI app in the background
+REM Start FastAPI app in the background and save PID
 start "FastAPI" cmd /c "uvicorn src.modules.gui.app:app --host %API_HOST% --port %API_PORT% --workers 4 > fastapi_%API_PORT%.log 2>&1" 
-REM Save PID (not trivial in Windows, so omitted for now)
+REM Save PID (not trivial in Windows batch, so we use a workaround)
+REM Find the most recent uvicorn process and save its PID
+for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq FastAPI" /NH') do (
+    echo %%a > %TEMP%\intvapp_fastapi_%API_PORT%.pid
+    goto :after_fastapi_pid
+)
+:after_fastapi_pid
 
-REM Start cloudflared in the background
+REM Start cloudflared in the background and save PID
 start "cloudflared" cmd /c "%CLOUDFLARED_BIN% tunnel --url http://localhost:%API_PORT% > cloudflared_%API_PORT%.log 2>&1"
-REM Save PID (not trivial in Windows, so omitted for now)
+REM Find the most recent cloudflared process and save its PID
+for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq cloudflared.exe" /FI "WINDOWTITLE eq cloudflared" /NH') do (
+    echo %%a > %TEMP%\intvapp_cloudflared_%API_PORT%.pid
+    goto :after_cloudflared_pid
+)
+:after_cloudflared_pid
 
 REM Print info and exit
 REM Wait for cloudflared public URL (not trivial in batch, so just print log location)

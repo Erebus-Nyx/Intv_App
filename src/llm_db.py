@@ -106,4 +106,12 @@ def get_missing_variables_for_module(module_name: str, lookup_id: str) -> dict:
     missing = {k: v for k, v in needed.items() if k not in existing}
     return missing
 
+def clear_llm_variables(lookup_id: str):
+    """Delete all cached LLM variables for a given lookup_id (file/interview)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM llm_variables WHERE lookup_id=?', (lookup_id,))
+    conn.commit()
+    conn.close()
+
 init_db()

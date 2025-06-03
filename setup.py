@@ -17,6 +17,12 @@ setup(
         'pdf2image',
         'pytesseract',
         'torch',  # For CUDA detection
+        'tkinter',
+        'psutil',
+        'poppler-utils',
+        'tesseract-ocr',
+        'fastapi',
+        'uvicorn',
     ],
     entry_points={
         'console_scripts': [

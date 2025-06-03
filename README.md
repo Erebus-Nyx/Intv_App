@@ -75,6 +75,7 @@ This project provides a robust, modular system for document analysis using Retri
 - Modular narrative modules (Adult, Child, AR, Collateral, Home Assessment, Allegations, Dispo, EA, Staffing)
 - Unified variable sourcing: DB → JSON defaults (in config/) → config.yaml → user prompt
 - Automatic chunking for TXT, PDF (with OCR fallback), and DOCX
+- **Default LLM provider:** Now defaults to **KoboldCpp** (`llm_provider: koboldcpp`, port `5001`). To use Ollama or OpenAI, set `--llm-provider` and `--llm-api-port` as needed.
 - LLM and RAG integration (OpenAI, Ollama, KoboldCpp, etc.)
 - SQLite backend for variable persistence and LLM reference
 - User-prompt fallback for missing variables, with clarification/finalization logic
@@ -89,6 +90,7 @@ This project provides a robust, modular system for document analysis using Retri
 
 - **Audio:** WAV, MP3, M4A, MP4, PDF (for transcription)
 - **Text/Document:** TXT, RTF, DOCX, PDF (for document analysis)
+- **Images:** JPG (basic support; OCR can be added as needed)
 
 You can use the CLI or web UI to process these files. The backend will automatically route audio files and PDF files to the transcription pipeline, and text/doc files (including PDF) to the RAG/documentation pipeline.
 
@@ -171,7 +173,30 @@ This works by adding/removing a line in your `~/.bashrc` that calls the batch sc
 
 ## Running as a Background Service
 
-Both the Linux (`run_and_info.sh`) and Windows (`run_and_info_win.bat`) scripts are designed to start FastAPI and Cloudflared in the background. You can use the `--exit` argument to stop all related processes.
+Both the Linux (`scripts/run_and_info.sh`) and Windows (`scripts/run_and_info_win.bat`) scripts are now functionally identical:
+
+- They start FastAPI and Cloudflared in the background, automatically freeing ports 3773/3774 as needed.
+- If `cloudflared` is missing, it will be downloaded automatically for your platform.
+- PID files are created in `/tmp/` (Linux) or `%TEMP%\` (Windows) for process management.
+- Use the `--exit` argument to stop all related FastAPI and Cloudflared processes and clean up PID files.
+- Logs are written to `fastapi_<port>.log` and `cloudflared_<port>.log` in the current directory.
+- On Windows, public URL detection is not automatic; check the log file for the Cloudflare public URL.
+
+Example usage:
+
+```sh
+# Start services (Linux)
+./scripts/run_and_info.sh
+
+# Start services (Windows)
+scripts\run_and_info_win.bat
+
+# Stop all services (Linux)
+./scripts/run_and_info.sh --exit
+
+# Stop all services (Windows)
+scripts\run_and_info_win.bat --exit
+```
 
 ## API Endpoint to Trigger CLI
 
