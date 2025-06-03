@@ -96,15 +96,27 @@ def dynamic_module_output(lookup_id=None, output_path=None, module_key=None, pro
             clarification_needed = True
             pending_questions.append(f"Please provide a value for {section}.")
         else:
-            Tmp += f"{var}: {assessed}\n"
+            # Only add the variable label and value once, and avoid repeating if label and value are the same
+            label = section.strip()
+            if label.lower() == var.replace('_', ' ').strip().lower():
+                Tmp += f"{label}: {assessed}\n"
+            else:
+                Tmp += f"{label}: {assessed}\n"
     # Compose the narrative with abbreviation reference at the top, no extra separating lines
     if abbrev_reference_text:
         narrative = f"{abbrev_reference_text}\n" + Tmp.strip()
     else:
         narrative = Tmp.strip()
-    # Remove duplicate prompts (e.g., 'Name: [No Name]Name: [No Name]')
+    # Remove duplicate lines (e.g., 'Name: [No Name]\nName: [No Name]')
     import re
-    narrative = re.sub(r'(\b\w+: [^\n]+)\1+', r'\1', narrative)
+    lines = narrative.splitlines()
+    seen = set()
+    deduped_lines = []
+    for line in lines:
+        if line not in seen:
+            deduped_lines.append(line)
+            seen.add(line)
+    narrative = "\n".join(deduped_lines)
     result = {
         "status": "pending" if clarification_needed else "success",
         # Use ensure_ascii=False and indent=2 for pretty output, and keep real line breaks

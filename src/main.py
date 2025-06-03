@@ -202,7 +202,7 @@ def main():
     parser = argparse.ArgumentParser(description='Document Analysis with RAG and LLM', add_help=True)
     parser.add_argument('--file', required=False, help='Path to the document')
     parser.add_argument('--format', required=False, choices=['pdf', 'docx', 'txt', 'rtf', 'mp4', 'm4a', 'jpg'], help='Document file format (optional, will be auto-detected from file extension if not provided)')
-    parser.add_argument('--model', required=False, default='hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M', help='Model name or ID (default: hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M)')
+    parser.add_argument('--model', required=False, default='hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q6_K_XL', help='Model name or ID (default: hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q6_K_XL)')
     parser.add_argument('--rag-mode', choices=['embedded', 'external'], default='embedded', help='RAG mode')
     parser.add_argument('--llm-provider', default='koboldcpp', help='LLM provider: openai, ollama, koboldcpp, etc. (default: koboldcpp)')
     parser.add_argument('--llm-api-base', default=None, help='Base URL for LLM API (e.g., https://api.openai.com or http://localhost)')
@@ -259,6 +259,24 @@ def main():
             except ValueError as e:
                 print(f"[ERROR] {e}")
                 sys.exit(1)
+    # --- Handle --mic: record, transcribe, and cache before LLM ---
+    if getattr(args, 'mic', False):
+        from datetime import datetime
+        transcript, metadata = stream_microphone_transcription('mic_recording.wav')
+        # Save to .cache/yyyy-mm-dd_hhmm_recording.json
+        cache_dir = Path('.cache')
+        cache_dir.mkdir(exist_ok=True)
+        dtstr = datetime.now().strftime('%Y-%m-%d_%H%M')
+        cache_path = cache_dir / f"{dtstr}_recording.json"
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump({'transcript': transcript, 'segments': metadata}, f, indent=2, ensure_ascii=False)
+        print(f"[INFO] Recording and transcript saved to {cache_path}")
+        # Optionally, set args.file to the cache_path for downstream processing
+        args.file = str(cache_path)
+        args.format = 'json'
+        # If you want to skip LLM evaluation for mic, you could return here
+        # return
+
     # Get dynamic interview/module types
     available_types = get_available_interview_types()
     type_keys = [t['key'] for t in available_types]
@@ -374,6 +392,36 @@ def main():
         if cutlass_available:
             extra_params['cutlass'] = True
 
+    # --- Koboldcpp model info check (if using koboldcpp) ---
+    backend_info = {}
+    if config.get('llm_provider', '').lower() == 'koboldcpp':
+        import requests
+        koboldcpp_url = f"http://localhost:{config.get('llm_api_port', 5001)}"
+        model_name = None
+        for endpoint in ["/v1/model", "/api/v1/model", "/v1/info", "/api/v1/info"]:
+            try:
+                resp = requests.get(koboldcpp_url + endpoint, timeout=3)
+                if resp.ok:
+                    data = resp.json()
+                    # Try common keys
+                    if isinstance(data, dict):
+                        model_name = data.get('model') or data.get('model_name') or data.get('model_path')
+                        # If still not found, try 'result' key
+                        if not model_name and 'result' in data:
+                            model_name = data['result']
+                    else:
+                        model_name = str(data)
+                    backend_info['koboldcpp_model'] = model_name
+                    backend_info['koboldcpp_endpoint'] = koboldcpp_url + endpoint
+                    break
+            except Exception as e:
+                continue
+        if not model_name:
+            backend_info['koboldcpp_model'] = 'Unknown (could not query koboldcpp API)'
+        print(f"[INFO] koboldcpp backend model: {backend_info.get('koboldcpp_model')}")
+    else:
+        backend_info['koboldcpp_model'] = None
+
     # Debug: print resolved config for LLM
     print(f"[DEBUG] LLM provider: {config.get('llm_provider')}, LLM port: {config.get('llm_api_port')}, LLM base: {config.get('llm_api_base')}")
     llm_output = analyze_chunks(
@@ -394,13 +442,14 @@ def main():
     # After menu selection, call the corresponding module
     if not getattr(args, 'gui', False):
         from modules.dynamic_module import dynamic_module_output
-        # Use the selected type as module_key
         module_key = args.type
-        # Provided data key is always <module_key>_data if present
         provided_data = None
         if hasattr(args, f'{module_key}_data'):
             provided_data = getattr(args, f'{module_key}_data')
         result = dynamic_module_output(lookup_id=args.file, output_path=args.output, module_key=module_key, provided_data=provided_data)
+        # Attach backend_info to output for user visibility
+        if isinstance(result, dict):
+            result['backend_info'] = backend_info
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return
 
