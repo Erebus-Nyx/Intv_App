@@ -195,6 +195,18 @@ def get_available_interview_types():
 
 def main():
     from pathlib import Path
+    import psutil
+    def is_process_running(name, check_status=False):
+        for proc in psutil.process_iter(['name', 'cmdline'] + (['status'] if check_status else [])):
+            try:
+                if name in proc.info['name'] or (proc.info['cmdline'] and any(name in c for c in proc.info['cmdline'])):
+                    if check_status:
+                        if proc.info.get('status', '').lower() in ('zombie', 'defunct'):
+                            continue
+                    return True
+            except Exception:
+                continue
+        return False
     """
     Main entrypoint for document/audio analysis and RAG/LLM workflow.
     Handles argument parsing, input validation, and pipeline orchestration.
@@ -221,6 +233,7 @@ def main():
     parser.add_argument('--remotetunnel', action='store_true', help='Start a Cloudflare tunnel for remote access')
     parser.add_argument('--output', required=False, default=None, help='Optional output file path for module results (default: print to stdout)')
     parser.add_argument('--shutdown', action='store_true', help='Shutdown all FastAPI and Cloudflared services (Linux: uses scripts/run_and_info.sh --exit)')
+    parser.add_argument('--tunnelinfo', action='store_true', help='Print the current Cloudflared public tunnel link (if available) and exit')
     parser.set_defaults(disable_cuda=False)  # Default: CUDA ON
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
@@ -230,10 +243,181 @@ def main():
     type_keys = [t['key'] for t in available_types]
     parser.add_argument('--type', required=False, choices=type_keys, help=f"Interview type/module: {', '.join(type_keys)}")
     args = parser.parse_args()
+
+    # --- Ensure FastAPI is running for all commands except shutdown/tunnelinfo/remotetunnel ---
+    skip_fastapi = any([
+        getattr(args, 'shutdown', False),
+        getattr(args, 'tunnelinfo', False),
+        getattr(args, 'remotetunnel', False)
+    ])
+    if not skip_fastapi:
+        import shutil
+        fastapi_running = is_process_running('uvicorn')
+        if not fastapi_running:
+            print('[INFO] FastAPI service not running. Starting FastAPI...')
+            fastapi_cmd = shutil.which('uvicorn') or 'uvicorn'
+            fastapi_proc = subprocess.Popen([
+                fastapi_cmd,
+                'src.modules.gui.app:app',
+                '--host', '0.0.0.0',
+                '--port', '3773',
+                '--workers', '4'
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Wait for FastAPI to be ready
+            import socket
+            import time
+            for _ in range(30):
+                try:
+                    with socket.create_connection(("127.0.0.1", 3773), timeout=1):
+                        print('[INFO] FastAPI is now running.')
+                        break
+                except Exception:
+                    time.sleep(1)
+            else:
+                print('[ERROR] FastAPI did not start within 30 seconds.')
+                sys.exit(1)
+        cloudflared_running = is_process_running('cloudflared')
+        if not cloudflared_running:
+            print('[INFO] Cloudflared not running. Starting cloudflared...')
+            cloudflared_bin = shutil.which('cloudflared') or './scripts/cloudflared-linux-amd64'
+            subprocess.Popen([
+                cloudflared_bin,
+                'tunnel', '--url', 'http://localhost:3773'
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(2)
+    # Handle --tunnelinfo argument
+    if getattr(args, 'tunnelinfo', False):
+        import glob
+        import os
+        cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
+        url_files = glob.glob(os.path.join(cache_dir, 'cloudflared_url_*.txt'))
+        if not url_files:
+            print("[INFO] No Cloudflared tunnel link found in .cache.")
+            sys.exit(0)
+        # Print all found links
+        for url_file in url_files:
+            with open(url_file, 'r', encoding='utf-8') as f:
+                link = f.read().strip()
+                print(f"[Cloudflared Tunnel] {os.path.basename(url_file)}: {link}")
+        sys.exit(0)
+    # Handle --remotetunnel argument
+    if getattr(args, 'remotetunnel', False):
+        import subprocess
+        import re
+        from datetime import datetime
+        import os
+        import shutil
+        import psutil
+        cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        port = 3773  # Default FastAPI port
+        # Check if cloudflared is already running (hardened: skip zombies/defunct)
+        def is_process_running(name):
+            for proc in psutil.process_iter(['name', 'cmdline', 'status']):
+                try:
+                    if (
+                        (name in proc.info['name'] or (proc.info['cmdline'] and any(name in c for c in proc.info['cmdline'])))
+                        and proc.info.get('status', '').lower() not in ('zombie', 'defunct')
+                    ):
+                        return True
+                except Exception:
+                    continue
+            return False
+        # Check for cached URLs
+        url_files = []
+        try:
+            url_files = [f for f in os.listdir(cache_dir) if f.startswith('cloudflared_url_') and f.endswith('.txt')]
+        except Exception:
+            pass
+        if is_process_running('cloudflared'):
+            if url_files:
+                print("[INFO] Cloudflared tunnel already running. Cached public URL(s):")
+                for url_file in url_files:
+                    url_path = os.path.join(cache_dir, url_file)
+                    with open(url_path, 'r', encoding='utf-8') as f:
+                        link = f.read().strip()
+                        print(f"[Cloudflared Tunnel] {url_file}: {link}")
+                sys.exit(0)
+            else:
+                # If no cached URL and process is running, warn and allow new tunnel
+                print("[WARN] Cloudflared process detected but no cached URL found. Starting a new tunnel anyway...")
+        elif url_files:
+            # If no process but cache exists, warn and allow new tunnel
+            print("[WARN] Cached Cloudflared URL(s) found but no process running. Removing stale cache and starting new tunnel...")
+            for url_file in url_files:
+                try:
+                    os.remove(os.path.join(cache_dir, url_file))
+                except Exception:
+                    pass
+        # Find cloudflared binary robustly
+        cloudflared_bin = shutil.which('cloudflared')
+        if not cloudflared_bin:
+            alt_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../scripts/cloudflared-linux-amd64'))
+            if os.path.isfile(alt_path) and os.access(alt_path, os.X_OK):
+                cloudflared_bin = alt_path
+            else:
+                print("[ERROR] cloudflared not found in PATH or scripts/. Please install cloudflared or place the binary at scripts/cloudflared-linux-amd64 and make it executable.")
+                sys.exit(1)
+        # Kill any zombie/defunct cloudflared processes before starting a new tunnel
+        for proc in psutil.process_iter(['name', 'cmdline', 'status']):
+            try:
+                if (
+                    'cloudflared' in proc.info['name'] or (proc.info['cmdline'] and any('cloudflared' in c for c in proc.info['cmdline']))
+                ) and proc.info.get('status', '').lower() in ('zombie', 'defunct'):
+                    proc.kill()
+            except Exception:
+                pass
+        print(f"[INFO] Starting Cloudflared tunnel for http://localhost:{port} ...")
+        proc = subprocess.Popen([
+            cloudflared_bin, 'tunnel', '--url', f'http://localhost:{port}'
+        ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        public_url = None
+        for line in proc.stdout:
+            if "trycloudflare.com" in line:
+                print(line, end="")
+                m = re.search(r'(https://[\w\-]+\.trycloudflare.com)', line)
+                if m:
+                    public_url = m.group(1)
+                    print(f"[Cloudflared] Public URL: {public_url}")
+                    # Verify the public URL is reachable before caching (retry up to 5 times)
+                    import requests
+                    import time as _time
+                    for attempt in range(5):
+                        try:
+                            resp = requests.get(public_url, timeout=10)
+                            if resp.status_code < 400:
+                                break  # Success
+                            else:
+                                print(f"[WARN] Cloudflared public URL returned HTTP {resp.status_code} (attempt {attempt+1}/5). Retrying...")
+                        except Exception as e:
+                            print(f"[WARN] Could not reach Cloudflared public URL (attempt {attempt+1}/5): {e}. Retrying...")
+                        _time.sleep(2)
+                    else:
+                        print(f"[ERROR] Could not reach Cloudflared public URL after 5 attempts. Not caching this URL.")
+                        public_url = None
+                        break
+                    # Cache the URL if reachable
+                    dtstr = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+                    url_path = os.path.join(cache_dir, f'cloudflared_url_{dtstr}.txt')
+                    with open(url_path, 'w', encoding='utf-8') as f:
+                        f.write(public_url)
+                    print(f"[INFO] Cloudflared public URL cached at {url_path}")
+                    break
+            elif "failed to sufficiently increase receive buffer size" in line:
+                continue
+            else:
+                print(line, end="")
+        proc.terminate()
+        if not public_url:
+            print("[ERROR] No valid Cloudflared public URL was established. Please check your tunnel and try again.")
+            sys.exit(1)
+        sys.exit(0)
     # Handle shutdown immediately after parsing args
     if getattr(args, 'shutdown', False):
         import subprocess
         import platform
+        import glob
+        import os
         if platform.system().lower().startswith('win'):
             script = 'scripts/run_and_info_win.bat'
             cmd = [script, '--exit']
@@ -242,6 +426,15 @@ def main():
             cmd = ['bash', script, '--exit']
         print(f"[INFO] Shutting down FastAPI and Cloudflared using {script} ...")
         subprocess.run(cmd)
+        # Remove cached tunnel URLs after shutdown
+        cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
+        url_files = glob.glob(os.path.join(cache_dir, 'cloudflared_url_*.txt'))
+        for url_file in url_files:
+            try:
+                os.remove(url_file)
+            except Exception:
+                pass
+        print("[INFO] Removed cached Cloudflared tunnel URLs from .cache.")
         sys.exit(0)
     sources = [s for s in [args.audio, args.mic] if s]
     if len(sources) > 1:
@@ -452,40 +645,6 @@ def main():
             result['backend_info'] = backend_info
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return
-
-# --- Auto-start FastAPI/Cloudflared if not running in background ---
-    import psutil
-    import shutil
-    def is_process_running(name):
-        for proc in psutil.process_iter(['name', 'cmdline']):
-            try:
-                if name in proc.info['name'] or (proc.info['cmdline'] and any(name in c for c in proc.info['cmdline'])):
-                    return True
-            except Exception:
-                continue
-        return False
-    fastapi_running = is_process_running('uvicorn')
-    cloudflared_running = is_process_running('cloudflared')
-    if not fastapi_running:
-        print('[INFO] FastAPI service not running. Starting FastAPI...')
-        fastapi_cmd = shutil.which('uvicorn') or 'uvicorn'
-        subprocess.Popen([
-            fastapi_cmd,
-            'src.modules.gui.app:app',
-            '--host', '0.0.0.0',
-            '--port', '3773',
-            '--workers', '4'
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(2)
-    if not cloudflared_running:
-        print('[INFO] Cloudflared not running. Starting cloudflared...')
-        cloudflared_bin = shutil.which('cloudflared') or './scripts/cloudflared-linux-amd64'
-        subprocess.Popen([
-            cloudflared_bin,
-            'tunnel', '--url', 'http://localhost:3773'
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(2)
-    # ...existing code...
 
 if __name__ == '__main__':
     main()

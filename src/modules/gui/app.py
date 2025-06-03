@@ -32,6 +32,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse as StarlettePlainTextResponse
 from fastapi import BackgroundTasks
 import platform
+from src.main import get_available_interview_types
 
 # Secret key for session cookies
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_urlsafe(32))
@@ -130,8 +131,9 @@ app.include_router(api_data)
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    # Send initial modules list so the frontend UI will display
-    await websocket.send_text(json.dumps({"type": "modules", "modules": ["example_module"]}))
+    # Dynamically get modules
+    modules = [t['key'] for t in get_available_interview_types()]
+    await websocket.send_text(json.dumps({"type": "modules", "modules": modules}))
     try:
         while True:
             data = await websocket.receive_text()

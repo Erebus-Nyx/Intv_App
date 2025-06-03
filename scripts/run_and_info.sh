@@ -7,6 +7,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# Ensure required host dependencies are installed (Linux/apt)
+REQUIRED_PKGS=(python3 python3-venv python3-pip tesseract-ocr poppler-utils cloudflared python3-tk)
+MISSING_PKGS=()
+for pkg in "${REQUIRED_PKGS[@]}"; do
+    if ! dpkg -s "$pkg" &>/dev/null; then
+        MISSING_PKGS+=("$pkg")
+    fi
+done
+if [ ${#MISSING_PKGS[@]} -ne 0 ]; then
+    echo "[INFO] Installing missing system dependencies: ${MISSING_PKGS[*]}"
+    sudo apt-get update && sudo apt-get install -y "${MISSING_PKGS[@]}"
+fi
+
 # Activate venv if present
 if [ -f ".venv/bin/activate" ]; then
   source .venv/bin/activate
@@ -111,7 +124,11 @@ echo $CLOUDFLARED_PID > /tmp/intvapp_cloudflared_${API_PORT}.pid
 (
   while ! grep -qE 'https://[a-z0-9\-]+\.trycloudflare.com' $CLOUDFLARED_LOG; do sleep 1; done
   LINK=$(grep -Eo 'https://[a-z0-9\-]+\.trycloudflare.com' $CLOUDFLARED_LOG | head -1)
+  # Save to .cache as well as /tmp for CLI compatibility
+  CACHE_DIR="$PROJECT_ROOT/.cache"
+  mkdir -p "$CACHE_DIR"
   echo "$LINK" > /tmp/cloudflared_url_${API_PORT}.txt
+  echo "$LINK" > "$CACHE_DIR/cloudflared_url_$(date +%Y-%m-%d_%H%M%S).txt"
   echo "\n==============================="
   echo "Cloudflared public URL: $LINK"
   echo "Local API listening at: http://$API_HOST:$API_PORT/app/v1"

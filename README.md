@@ -8,6 +8,53 @@ This project provides a robust, modular system for document analysis using Retri
 
 ---
 
+## ⚠️ Host System Dependencies (Local/Non-Docker Installs)
+
+Before running Intv_App locally (outside Docker), you **must** install the following system packages and tools on your host:
+
+> **Note:** If you use the Linux startup script (`scripts/run_and_info.sh`), all required apt packages will be automatically installed for you on first run. You may still review the list below for reference or for manual setup.
+
+### Linux (Debian/Ubuntu)
+```sh
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip tesseract-ocr poppler-utils cloudflared python3-tk
+```
+
+### macOS (Homebrew)
+```sh
+brew install python@3.10 tesseract poppler cloudflared
+# Tkinter is included with the official Python.org installer; if using Homebrew Python, also run:
+brew install tcl-tk
+```
+
+### Windows
+- **Python 3.10+**: [Download from python.org](https://www.python.org/downloads/)
+- **Tkinter**: Included with the official Python installer (make sure to check the box during install)
+- **Tesseract-OCR**: [Download installer](https://github.com/tesseract-ocr/tesseract/wiki)
+- **Poppler**: [Download binaries](http://blog.alivate.com.au/poppler-windows/), add `bin/` to your PATH
+- **cloudflared**: [Download from Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)
+
+### LLM Backends (Optional, for local LLM inference)
+- **Ollama**: [Install instructions](https://ollama.com/download)
+- **KoboldCpp**: [Releases & setup](https://github.com/LostRuins/koboldcpp)
+
+### Python Packages
+After installing system dependencies, create a virtual environment and install Python requirements:
+```sh
+python3 -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+> **Note:**
+> - `tkinter` is a system package, not a pip package. If you see errors about missing `tkinter`, install it via your OS package manager.
+> - `cloudflared` must be in your PATH for tunnel features to work.
+> - For OCR and PDF support, both `tesseract-ocr` and `poppler-utils` are required.
+> - If you use the web UI or CLI tunnel features, you must have `cloudflared` installed.
+> - For LLM inference, install and run either Ollama or KoboldCpp as needed.
+
+---
+
 ## 🚀 Quick Start
 
 ### Local Usage
@@ -203,6 +250,47 @@ scripts\run_and_info_win.bat --exit
 A new API endpoint is available:
 
 - `POST /api/generate` — Triggers the CLI script in the background. Returns the process output. (For production, restrict this endpoint to admin mode if needed.)
+
+---
+
+## 🧠 Recommended LLM Models for Reasoning (7B–30B)
+
+You can use any of the following models for strong reasoning performance with this app (KoboldCpp, Ollama, etc.):
+
+1. **Phi-3 Mini (8B)**
+   - Excellent reasoning, strong performance for its size.
+   - Model: `microsoft/Phi-3-mini-128k-instruct` (GGUF: `Phi-3-mini-128k-instruct.Q4_K_M.gguf`)
+
+2. **Llama-3 8B Instruct**
+   - Very strong reasoning and instruction-following.
+   - Model: `meta-llama/Meta-Llama-3-8B-Instruct` (GGUF: `Llama-3-8B-Instruct.Q4_K_M.gguf`)
+
+3. **Mistral 7B Instruct**
+   - Compact, fast, and surprisingly capable at reasoning.
+   - Model: `mistralai/Mistral-7B-Instruct-v0.2` (GGUF: `Mistral-7B-Instruct-v0.2.Q4_K_M.gguf`)
+
+4. **Nous Hermes 2 - Llama-3 8B**
+   - Fine-tuned for reasoning and conversation.
+   - Model: `NousResearch/Nous-Hermes-2-Llama-3-8B` (GGUF: `Nous-Hermes-2-Llama-3-8B.Q4_K_M.gguf`)
+
+5. **Llama-2 13B Chat**
+   - Larger context and strong reasoning.
+   - Model: `meta-llama/Llama-2-13b-chat-hf` (GGUF: `Llama-2-13B-chat.Q4_K_M.gguf`)
+
+6. **Qwen2 18B Chat**
+   - Excellent reasoning and multi-turn ability, strong at 18B.
+   - Model: `Qwen/Qwen2-18B-Chat` (GGUF: `Qwen2-18B-Chat.Q4_K_M.gguf`)
+
+7. **Mixtral 8x22B (MoE, ~22B active)**
+   - State-of-the-art mixture-of-experts, very strong at reasoning.
+   - Model: `mistralai/Mixtral-8x22B-Instruct-v0.1` (GGUF: `Mixtral-8x22B-Instruct-v0.1.Q4_K_M.gguf`)
+
+8. **Current Default: Phi-4 Reasoning Plus (Q6_K_XL)**
+   - Outstanding at reasoning, especially for professional and structured tasks.
+   - Model: `hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q6_K_XL`
+   - This is the default in your app (`--model` argument).
+
+> All of these are available in GGUF format for KoboldCpp and as models for Ollama. For best results, use Q4_K_M or Q6_K_S quantizations for a balance of speed and reasoning quality.
 
 ---
 
