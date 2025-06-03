@@ -1,58 +1,93 @@
-const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host.replace(/:.*$/, ':3773') + '/ws';
+console.log('DEBUG: app.js loaded at', new Date().toISOString(), 'VERSION: 2025-06-02-test');
+
+const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 let ws;
+let currentWsUrl = wsUrl;
 
 function connectWS(customUrl) {
   if (ws) ws.close();
-  wsUrl = customUrl || wsUrl;
-  ws = new WebSocket(wsUrl);
+  currentWsUrl = customUrl || wsUrl;
+  console.log('Opening WebSocket to', currentWsUrl);
+  ws = new WebSocket(currentWsUrl);
   ws.onopen = () => {
-    document.getElementById('status').textContent = 'Connected.';
-    document.getElementById('progressBarContainer').style.display = 'none';
+    console.log('WebSocket connected');
+    const status = document.getElementById('status');
+    if (status) status.textContent = 'Connected.';
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    if (progressBarContainer) progressBarContainer.style.display = 'none';
   };
   ws.onclose = () => {
-    document.getElementById('status').textContent = 'Disconnected. Retrying...';
-    setTimeout(() => connectWS(wsUrl), 2000);
+    console.log('WebSocket closed, retrying...');
+    const status = document.getElementById('status');
+    if (status) status.textContent = 'Disconnected. Retrying...';
+    setTimeout(() => connectWS(currentWsUrl), 2000);
   };
   ws.onerror = (e) => {
-    document.getElementById('status').textContent = 'WebSocket error.';
+    console.log('WebSocket error', e);
+    const status = document.getElementById('status');
+    if (status) status.textContent = 'WebSocket error.';
   };
   ws.onmessage = (event) => {
+    console.log('WebSocket message:', event.data);
     const msg = JSON.parse(event.data);
     if (msg.type === 'modules') {
       const sel = document.getElementById('modules');
-      sel.innerHTML = '';
-      msg.modules.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = m;
-        sel.appendChild(opt);
-      });
-      document.getElementById('moduleSelect').style.display = '';
+      if (sel) {
+        sel.innerHTML = '';
+        msg.modules.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          sel.appendChild(opt);
+        });
+      }
+      const moduleSelect = document.getElementById('moduleSelect');
+      if (moduleSelect) moduleSelect.style.display = '';
     } else if (msg.type === 'progress') {
-      document.getElementById('progress').style.display = '';
-      document.getElementById('progress').textContent = msg.msg;
-      document.getElementById('progressBarContainer').style.display = '';
+      const progress = document.getElementById('progress');
+      const progressBarContainer = document.getElementById('progressBarContainer');
+      if (progress) {
+        progress.style.display = '';
+        progress.textContent = msg.msg;
+      }
+      if (progressBarContainer) progressBarContainer.style.display = '';
       let percent = msg.percent || 0;
-      document.getElementById('progressBar').style.width = percent + '%';
+      const progressBar = document.getElementById('progressBar');
+      if (progressBar) progressBar.style.width = percent + '%';
     } else if (msg.type === 'result') {
-      document.getElementById('progress').style.display = 'none';
-      document.getElementById('progressBarContainer').style.display = 'none';
-      document.getElementById('result').style.display = '';
-      document.getElementById('result').textContent = JSON.stringify(msg, null, 2);
-      document.getElementById('recordingIndicator').style.display = 'none';
+      const progress = document.getElementById('progress');
+      const progressBarContainer = document.getElementById('progressBarContainer');
+      const result = document.getElementById('result');
+      const recordingIndicator = document.getElementById('recordingIndicator');
+      if (progress) progress.style.display = 'none';
+      if (progressBarContainer) progressBarContainer.style.display = 'none';
+      if (result) {
+        result.style.display = '';
+        result.textContent = JSON.stringify(msg, null, 2);
+      }
+      if (recordingIndicator) recordingIndicator.style.display = 'none';
     } else if (msg.type === 'recording') {
-      document.getElementById('recordingIndicator').style.display = msg.active ? '' : 'none';
+      const recordingIndicator = document.getElementById('recordingIndicator');
+      if (recordingIndicator) recordingIndicator.style.display = msg.active ? '' : 'none';
     } else if (msg.type === 'error') {
       alert(msg.msg);
-      document.getElementById('progressBarContainer').style.display = 'none';
-      document.getElementById('recordingIndicator').style.display = 'none';
+      const progressBarContainer = document.getElementById('progressBarContainer');
+      const recordingIndicator = document.getElementById('recordingIndicator');
+      if (progressBarContainer) progressBarContainer.style.display = 'none';
+      if (recordingIndicator) recordingIndicator.style.display = 'none';
     }
   };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Remove user selector logic
-  document.getElementById('app').style.display = '';
+  console.log('DOMContentLoaded fired');
+  const appDiv = document.getElementById('app');
+  if (appDiv) {
+    appDiv.style.display = '';
+    console.log('#app made visible');
+  } else {
+    console.log('No #app element found');
+  }
 
   // Add Admin Login/Logout button
   const adminDiv = document.createElement('div');
@@ -62,135 +97,95 @@ document.addEventListener('DOMContentLoaded', () => {
     <button id="adminLogoutBtn" style="display:none;">Admin Logout</button>
     <span id="adminStatus"></span>
   `;
-  document.getElementById('app').prepend(adminDiv);
+  if (appDiv) appDiv.prepend(adminDiv);
 
   async function refreshAdmin() {
     const resp = await fetch('/api/v1/whoami');
     const data = await resp.json();
+    const adminPanel = document.getElementById('adminPanel');
+    const adminLoginBtn = document.getElementById('adminLoginBtn');
+    const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+    const adminStatus = document.getElementById('adminStatus');
+    if (!adminPanel) console.warn('adminPanel not found');
+    if (!adminLoginBtn) console.warn('adminLoginBtn not found');
+    if (!adminLogoutBtn) console.warn('adminLogoutBtn not found');
+    if (!adminStatus) console.warn('adminStatus not found');
     if (data.admin) {
-      document.getElementById('adminPanel').style.display = '';
-      document.getElementById('adminLoginBtn').style.display = 'none';
-      document.getElementById('adminLogoutBtn').style.display = '';
-      document.getElementById('adminStatus').textContent = ' (Admin mode)';
+      if (adminPanel) adminPanel.style.display = '';
+      if (adminLoginBtn) adminLoginBtn.style.display = 'none';
+      if (adminLogoutBtn) adminLogoutBtn.style.display = '';
+      if (adminStatus) adminStatus.textContent = ' (Admin mode)';
     } else {
-      document.getElementById('adminPanel').style.display = 'none';
-      document.getElementById('adminLoginBtn').style.display = '';
-      document.getElementById('adminLogoutBtn').style.display = 'none';
-      document.getElementById('adminStatus').textContent = '';
+      if (adminPanel) adminPanel.style.display = 'none';
+      if (adminLoginBtn) adminLoginBtn.style.display = '';
+      if (adminLogoutBtn) adminLogoutBtn.style.display = 'none';
+      if (adminStatus) adminStatus.textContent = '';
     }
   }
 
-  document.getElementById('adminLoginBtn').onclick = async () => {
-    await fetch('/api/v1/admin_login', { method: 'POST' });
-    await refreshAdmin();
-  };
-  document.getElementById('adminLogoutBtn').onclick = async () => {
-    await fetch('/api/v1/admin_logout', { method: 'POST' });
-    await refreshAdmin();
-  };
+  const adminLoginBtn = document.getElementById('adminLoginBtn');
+  if (adminLoginBtn) {
+    adminLoginBtn.onclick = async () => {
+      await fetch('/api/v1/admin_login', { method: 'POST' });
+      await refreshAdmin();
+    };
+  }
+  const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+  if (adminLogoutBtn) {
+    adminLogoutBtn.onclick = async () => {
+      await fetch('/api/v1/admin_logout', { method: 'POST' });
+      await refreshAdmin();
+    };
+  }
 
   refreshAdmin();
 
-  // Password show/hide toggle with SVG eye icons
-  const passwordInput = document.getElementById('password');
-  const togglePassword = document.getElementById('togglePassword');
-  if (togglePassword && passwordInput) {
-    const eyeOpen = document.getElementById('eyeOpen');
-    const eyeClosed = document.getElementById('eyeClosed');
-    let shown = false;
-    togglePassword.addEventListener('click', function() {
-      shown = !shown;
-      passwordInput.setAttribute('type', shown ? 'text' : 'password');
-      if (shown) {
-        eyeOpen.style.display = 'none';
-        eyeClosed.style.display = '';
-        togglePassword.setAttribute('aria-label', 'Hide password');
-      } else {
-        eyeOpen.style.display = '';
-        eyeClosed.style.display = 'none';
-        togglePassword.setAttribute('aria-label', 'Show password');
-      }
-    });
+  // Always connect WebSocket on load
+  console.log('Connecting WebSocket...');
+  connectWS();
+
+  // Workflow button
+  const startBtn = document.getElementById('startBtn');
+  if (startBtn) {
+    startBtn.onclick = () => {
+      if (ws) ws.send(JSON.stringify({type: 'start_workflow'}));
+    };
   }
 
-  // Check authentication
-  fetch('/api/v1/whoami', { credentials: 'same-origin' }).then(async r => {
-    if (r.ok) {
-      const data = await r.json();
-      if (data.user || data.role) {
-        document.getElementById('loginPanel').style.display = 'none';
-        document.getElementById('app').style.display = '';
-        connectWS();
-        // --- Admin CLI Panel ---
-        if (data.role === 'admin') {
-          document.getElementById('adminPanel').style.display = '';
-        }
-      } else {
-        document.getElementById('loginPanel').style.display = '';
-        document.getElementById('app').style.display = 'none';
+  // Module run button (optional, only if present)
+  const runBtn = document.getElementById('runBtn');
+  if (runBtn) {
+    runBtn.onclick = () => {
+      const moduleSel = document.getElementById('modules');
+      const module = moduleSel ? moduleSel.value : '';
+      const defaultsCheckbox = document.getElementById('defaultsCheckbox');
+      const useDefaults = defaultsCheckbox ? defaultsCheckbox.checked : false;
+      if (ws) ws.send(JSON.stringify({type: 'run_module', module: module, input: {}, defaults: useDefaults}));
+      const progress = document.getElementById('progress');
+      const result = document.getElementById('result');
+      if (progress) {
+        progress.style.display = '';
+        progress.textContent = 'Running...';
       }
-    } else {
-      document.getElementById('loginPanel').style.display = '';
-      document.getElementById('app').style.display = 'none';
-    }
-  }).catch(() => {
-    document.getElementById('loginPanel').style.display = '';
-    document.getElementById('app').style.display = 'none';
-  });
-
-  document.getElementById('logoutBtn').onclick = () => {
-    fetch('/logout').then(() => location.reload());
-  };
-
-  document.getElementById('startBtn').onclick = () => {
-    ws.send(JSON.stringify({type: 'start_workflow'}));
-  };
-  document.getElementById('runBtn').onclick = () => {
-    const module = document.getElementById('modules').value;
-    const useDefaults = document.getElementById('defaultsCheckbox').checked;
-    ws.send(JSON.stringify({type: 'run_module', module: module, input: {}, defaults: useDefaults}));
-    document.getElementById('progress').style.display = '';
-    document.getElementById('progress').textContent = 'Running...';
-    document.getElementById('result').style.display = 'none';
-  };
-
-  document.getElementById('wssSetBtn').onclick = () => {
-    const url = document.getElementById('wssInput').value.trim();
-    if (url) connectWS(url);
-  };
-
-  // Admin CLI form submission
-  const adminForm = document.getElementById('adminCliForm');
-  if (adminForm) {
-    adminForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const file = document.getElementById('cliFile').value;
-      const type = document.getElementById('cliType').value;
-      const extra = document.getElementById('cliExtra').value;
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type);
-      formData.append('extra_args', extra);
-      const resp = await fetch('/admin/run-cli', { method: 'POST', body: formData, credentials: 'same-origin' });
-      const out = document.getElementById('cliOutput');
-      if (resp.ok) {
-        const result = await resp.json();
-        out.textContent = 'STDOUT:\n' + result.stdout + '\nSTDERR:\n' + result.stderr;
-      } else {
-        const err = await resp.json();
-        out.textContent = 'Error: ' + (err.error || 'Unknown error');
-      }
+      if (result) result.style.display = 'none';
     };
   }
 
   // Add recording button for demonstration (admin only)
-  if (document.getElementById('adminPanel')) {
+  const adminPanel = document.getElementById('adminPanel');
+  if (adminPanel) {
     const recBtn = document.createElement('button');
     recBtn.textContent = 'Toggle Recording';
     recBtn.style.marginTop = '1em';
     recBtn.onclick = () => {
-      ws.send(JSON.stringify({type: 'recording', active: document.getElementById('recordingIndicator').style.display === 'none'}));
+      const recordingIndicator = document.getElementById('recordingIndicator');
+      if (ws && recordingIndicator)
+        ws.send(JSON.stringify({type: 'recording', active: recordingIndicator.style.display === 'none'}));
     };
-    document.getElementById('adminPanel').appendChild(recBtn);
+    adminPanel.appendChild(recBtn);
   }
+
+  // In the UI, update any file upload or accepted file type logic to allow PDF for both document analysis and transcription.
+  // In the API docs, clarify that PDF is accepted for both workflows.
+  // In the FastAPI docs, ensure /api/generate and any upload endpoints mention PDF as a valid input for transcription as well as analysis.
 });

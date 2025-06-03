@@ -43,4 +43,4 @@ if [ "$CLOUDFLARE_ENABLED" = "true" ]; then
 fi
 
 # Start the main app (uvicorn)
-exec uvicorn src.modules.gui.app:app --host 0.0.0.0 --port 3773 --workers 4
+exec uvicorn src.modules.gui.app:app --host 0.0.0.0 --port 3773

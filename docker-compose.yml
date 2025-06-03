@@ -1,4 +1,4 @@
-networks:
++networks:
   vLAN:
      external: true
 
@@ -24,7 +24,7 @@ services:
       MODEL: ${MODEL:-hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M}
       EXTERNAL_RAG: ${EXTERNAL_RAG:-false}  # Set to 'true' to enable external RAG, 'false' to disable
       PURGE_VARIABLES: ${PURGE_VARIABLES:-false}  # Set to 'true' to enable purging, 'false' to disable
-      SESSION_COOKIE_SECURE: false # Force non-secure cookie for troubleshooting
+      SESSION_COOKIE_SECURE: "true" # Force non-secure cookie for troubleshooting
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-admin}
     volumes:

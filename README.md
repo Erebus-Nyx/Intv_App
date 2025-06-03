@@ -4,13 +4,13 @@
 > 
 > This project is in **alpha** status and is still under active development. Not all features are fully functional or stable. Expect breaking changes, incomplete modules, and evolving APIs. Use at your own risk and see the issues tracker for known limitations.
 
-This project provides a robust, modular CLI and web-based system for document analysis using Retrieval Augmented Generation (RAG) and LLMs. It is designed to process TXT, PDF, and DOCX files, extract structured variables, and generate narrative outputs for various interview and assessment modules.
+This project provides a robust, modular system for document analysis using Retrieval Augmented Generation (RAG) and LLMs. It is designed to process TXT, PDF, and DOCX files, extract structured variables, and generate narrative outputs for various interview and assessment modules.
 
 ---
 
 ## 🚀 Quick Start
 
-### Local CLI Usage
+### Local Usage
 1. Edit `config/config.yaml` and any `config/*.json` as needed.
 2. (Recommended) Create and activate a Python virtual environment:
    ```sh
@@ -18,7 +18,7 @@ This project provides a robust, modular CLI and web-based system for document an
    source .venv/bin/activate  # or .venv\Scripts\activate on Windows
    pip install -r requirements.txt
    ```
-3. Run the CLI:
+3. Run the app:
    ```sh
    python -m src.main --file yourfile.pdf --type pdf
    ```
@@ -49,11 +49,14 @@ This project provides a robust, modular CLI and web-based system for document an
 
 ---
 
-## 🌐 Cloudflare Tunnel Integration
+## 🌐 Cloudflare Tunnel Integration & Security
 - **Default:** Cloudflare tunnel is **off** unless enabled.
 - **Enable in Docker:** Set `USE_CLOUDFLARE_TUNNEL=true` in `.env`.
 - **Enable in CLI:** Pass `--cloudflare` to the entrypoint script, or use `--cloudflare-env` to use the environment variable.
 - The tunnel will forward the public URL to your running app on port 3773.
+- **Access Split:**
+  - All HTTP(S) endpoints (including `/api`, `/api/v1`, `/api/admin`, `/api/data`) can be protected by Cloudflare Access or WAF.
+  - The WebSocket endpoint (`/ws`) is public by default, but can be restricted via Cloudflare Access/WAF if needed.
 - No config warning will appear; a minimal config is created automatically for free tunnels.
 
 ---
@@ -76,7 +79,42 @@ This project provides a robust, modular CLI and web-based system for document an
 - SQLite backend for variable persistence and LLM reference
 - User-prompt fallback for missing variables, with clarification/finalization logic
 - All modules and configs enforce narrative, variable, and compliance standards per guidelines/template
-- API endpoints under `/api/v1/` (see FastAPI docs at `/api/v1/docs`)
+- API endpoints under `/api/v1/`, `/api/admin/`, `/api/data/` (see FastAPI docs at `/api`)
+- WebSocket endpoint at `/ws` for real-time UI updates (public by default)
+- No login or multi-user logic; admin features are toggled in the UI by a button
+
+---
+
+## 📄 Supported Input Types
+
+- **Audio:** WAV, MP3, M4A, MP4, PDF (for transcription)
+- **Text/Document:** TXT, RTF, DOCX, PDF (for document analysis)
+
+You can use the CLI or web UI to process these files. The backend will automatically route audio files and PDF files to the transcription pipeline, and text/doc files (including PDF) to the RAG/documentation pipeline.
+
+### CLI Usage Examples
+
+- **Transcribe audio:**
+  ```sh
+  python src/main.py --audio path/to/audiofile.wav
+  ```
+- **Process document (TXT, RTF, DOCX):**
+  ```sh
+  python src/main.py --file path/to/document.docx
+  ```
+- **Record from microphone:**
+  ```sh
+  python src/main.py --mic
+  ```
+- **Interactive mode (prompt for file or mic):**
+  ```sh
+  python src/main.py
+  ```
+
+### Web UI
+- Upload TXT, RTF, DOCX, or audio files directly in the browser.
+- The backend will process the file appropriately (RAG for text/docs, transcription for audio).
+- Admin features are toggled by a button in the UI (no login required).
 
 ---
 
@@ -88,8 +126,11 @@ This project provides a robust, modular CLI and web-based system for document an
 ---
 
 ## 🔒 Security & Admin
-- Admin user/password set via `.env` or Docker Compose environment.
-- All API endpoints require authentication.
+- Admin mode is toggled in the UI (no login or password required).
+- API endpoints are split into `/api/v1`, `/api/admin`, and `/api/data`.
+- Protect HTTP(S) endpoints with Cloudflare Access or WAF as needed.
+- WebSocket endpoint (`/ws`) is public by default, but can be restricted via Cloudflare if desired.
+- `.gitignore` and `.dockerignore` are hardened to prevent secrets, uploads, and sensitive files from being committed or included in images.
 
 ---
 
@@ -111,6 +152,32 @@ This project provides a robust, modular CLI and web-based system for document an
 - For OCR issues: ensure `tesseract-ocr` and `pdf2image` are installed.
 - For LLM/RAG issues: check your config and provider/model settings.
 - For GPU: ensure NVIDIA drivers and CUDA are installed. Use `--cpu` to disable GPU.
+
+---
+
+## Windows/WSL Startup Automation
+
+The script `scripts/run_and_info_win.bat` now supports automatic startup registration for WSL:
+
+- To add the script to your WSL startup (so it runs automatically when WSL launches):
+  ```sh
+  scripts/run_and_info_win.bat --startup true
+  ```
+- To remove the script from WSL startup:
+  ```sh
+  scripts/run_and_info_win.bat --startup false
+  ```
+This works by adding/removing a line in your `~/.bashrc` that calls the batch script via bash.
+
+## Running as a Background Service
+
+Both the Linux (`run_and_info.sh`) and Windows (`run_and_info_win.bat`) scripts are designed to start FastAPI and Cloudflared in the background. You can use the `--exit` argument to stop all related processes.
+
+## API Endpoint to Trigger CLI
+
+A new API endpoint is available:
+
+- `POST /api/generate` — Triggers the CLI script in the background. Returns the process output. (For production, restrict this endpoint to admin mode if needed.)
 
 ---
 

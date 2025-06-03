@@ -57,6 +57,42 @@ outputs/
 .DS_Store
 Thumbs.db
 
+# Environment and secrets
+.env
+.env.*
+*.env
+secrets.*
+*.secrets
+config/config.cloudflare.yaml
+config/cloudflared/
+
+# Cloudflare and tunnel artifacts
+web-apps/cloudflared.log
+
+# Local uploads, outputs, and data
+config/uploads/
+config/outputs/
+src/modules/gui/output/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Ignore shell history and local scripts
+*.sh~
+*.bak
+*.swp
+
+# Ignore node_modules and frontend build
+node_modules/
+
+# Ignore test and debug artifacts
+*.tmp
+*.log
+*.bak
+
 # Do not ignore config and src JSON/YAML files
 !config/*.json
 !config/*.yaml

@@ -158,7 +158,7 @@ def start_cloudflared_tunnel(port=3773):
 
 def main():
     """
-    Main CLI entrypoint for document/audio analysis and RAG/LLM workflow.
+    Main entrypoint for document/audio analysis and RAG/LLM workflow.
     Handles argument parsing, input validation, and pipeline orchestration.
     """
     parser = argparse.ArgumentParser(description='Document Analysis with RAG and LLM')
@@ -172,7 +172,7 @@ def main():
     parser.add_argument('--llm-api-port', default=None, type=int, help='Port for LLM API (if required)')
     parser.add_argument('--nowada', action='store_false', dest='disable_cuda', help='Disable CUDA (GPU) acceleration for supported LLMs (AR mode, disables CUDA)')
     parser.add_argument('--config', default=None, help='Path to config.json (overrides defaults)')
-    parser.add_argument('--gui', action='store_true', help='Enable web-based GUI (if not set, defaults to CLI only)')
+    parser.add_argument('--gui', action='store_true', help='Enable web-based GUI (if not set, defaults to terminal mode)')
     parser.add_argument('--cpu', action='store_true', help='Force CPU-only mode (disables CUDA and CUTLASS, for AMD/ARM compatibility)')
     parser.add_argument('--audio', type=str, help='Path to audio file for transcription')
     parser.add_argument('--mic', action='store_true', help='Use microphone for streaming transcription')
@@ -206,7 +206,7 @@ def main():
         print("No audio source provided. Use --audio <file> or --mic.")
         sys.exit(1)
 
-    # CLI menu if not in GUI mode
+    # Menu if not in GUI mode
     if not getattr(args, 'gui', False):
         print("\nSelect an option:")
         print("1. Adult interview")
@@ -250,7 +250,7 @@ def main():
         print("[INFO] GUI mode enabled. (Web interface setup placeholder)")
         # Placeholder: Launch web server here in the future
     else:
-        print("[INFO] CLI mode (default)")
+        print("[INFO] Terminal mode (default)")
 
     # Start RAG progress indicator in a thread
     progress_thread = threading.Thread(target=show_rag_progress)
@@ -270,7 +270,7 @@ def main():
     show_rag_progress.done = True
     progress_thread.join()
 
-    # Load config and optionally override with CLI args
+    # Load config and optionally override with command-line args
     from src.config import load_config, save_config
     config = load_config()
     # Load from YAML if present
@@ -289,7 +289,7 @@ def main():
             with config_path.open('r', encoding='utf-8') as f:
                 user_config = json.load(f)
             config.update(user_config)
-    # Override config with CLI args if provided
+    # Override config with command-line args if provided
     for k in ['llm_api_base', 'llm_api_key', 'llm_api_port', 'llm_provider', 'model', 'external_rag', 'purge_variables', 'name']:
         v = getattr(args, k, None)
         if v is not None:
@@ -386,7 +386,7 @@ def main():
             if confirm in {'y', 'n'}:
                 break
         if confirm == 'n':
-            print("[INFO] Operation cancelled. Returning to CLI menu.")
+            print("[INFO] Operation cancelled. Returning to menu.")
             return
         # Proceed with LLM extraction
         # Load YAML defaults for the selected module
