@@ -1,4 +1,9 @@
 {
+  "_header": {
+    "type": "example",
+    "label": "Example Variables",
+    "description": "Example variable set for demonstration and testing."
+  },
   "example_var": {
     "type": "string",
     "default": "example value",

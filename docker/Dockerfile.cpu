@@ -41,13 +41,25 @@ COPY . .
 ENV APP_ADMIN_USER=admin
 ENV APP_ADMIN_PASS=admin
 
+# Set environment variables for app config
+ENV LLM_API_PORT=${LLM_API_PORT:-5001} \
+    LLM_PROVIDER=${LLM_PROVIDER:-ollama} \
+    MODEL=${MODEL:-hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M} \
+    EXTERNAL_RAG=${EXTERNAL_RAG:-false} \
+    PURGE_VARIABLES=${PURGE_VARIABLES:-false} \
+    SESSION_COOKIE_SECURE="true" \
+    APP_ADMIN_USERNAME=${APP_ADMIN_USERNAME:-admin} \
+    APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD:-admin}
+
 # Expose the GUI port for NGINX/Cloudflare proxy
 EXPOSE 3773
 
-# Default command: run FastAPI/Uvicorn directly with proxy headers
-CMD ["uvicorn", "src.modules.gui.app:app", "--host", "0.0.0.0", "--port", "3773", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips=*"]
+# Entrypoint logic: select between GUI and CLI based on APP_MODE (default: gui)
+ENV APP_MODE=gui
+COPY scripts/cloudflared-entrypoint.sh /app/scripts/cloudflared-entrypoint.sh
+RUN chmod +x /app/scripts/cloudflared-entrypoint.sh
 
-# Notes:
-# - This image is compatible with x86 and ARM (Raspberry Pi) architectures.
-# - For ARM, ensure all dependencies in requirements.txt are available for ARM.
-# - You can override the CMD for CLI or other entrypoints as needed.
+ENTRYPOINT ["/app/scripts/cloudflared-entrypoint.sh"]
+# The entrypoint script should handle launching either the FastAPI GUI or the CLI pipeline based on $APP_MODE
+# Example logic in cloudflared-entrypoint.sh:
+#   if [ "$APP_MODE" = "cli" ]; then exec python src/main.py; else exec uvicorn src.modules.gui.app:app --host 0.0.0.0 --port 3773 --workers 4 --proxy-headers --forwarded-allow-ips=*; fi

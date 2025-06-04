@@ -1,4 +1,9 @@
 {
+  "_header": {
+    "type": "homeassess",
+    "label": "Home Assessment",
+    "description": "Variables for home assessment narrative and rubric selection."
+  },
   "Name": {"default": "[No Name]", "hint": "Full name of the resident/subject"},
   "Role": {"default": "Resident", "hint": "Role in household (e.g. mother, child, etc.)"},
   "AssessmentDate": {"default": "", "hint": "Date of home assessment"},

@@ -34,7 +34,6 @@ brew install tcl-tk
 - **cloudflared**: [Download from Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)
 
 ### LLM Backends (Optional, for local LLM inference)
-- **Ollama**: [Install instructions](https://ollama.com/download)
 - **KoboldCpp**: [Releases & setup](https://github.com/LostRuins/koboldcpp)
 
 ### Python Packages
@@ -122,8 +121,8 @@ pip install -r requirements.txt
 - Modular narrative modules (Adult, Child, AR, Collateral, Home Assessment, Allegations, Dispo, EA, Staffing)
 - Unified variable sourcing: DB → JSON defaults (in config/) → config.yaml → user prompt
 - Automatic chunking for TXT, PDF (with OCR fallback), and DOCX
-- **Default LLM provider:** Now defaults to **KoboldCpp** (`llm_provider: koboldcpp`, port `5001`). To use Ollama or OpenAI, set `--llm-provider` and `--llm-api-port` as needed.
-- LLM and RAG integration (OpenAI, Ollama, KoboldCpp, etc.)
+- **Default LLM provider:** Now defaults to **KoboldCpp** (`llm_provider: koboldcpp`, port `5001`). To use OpenAI, set `--llm-provider` and `--llm-api-port` as needed.
+- LLM and RAG integration (OpenAI, KoboldCpp)
 - SQLite backend for variable persistence and LLM reference
 - User-prompt fallback for missing variables, with clarification/finalization logic
 - All modules and configs enforce narrative, variable, and compliance standards per guidelines/template
@@ -240,7 +239,6 @@ scripts\run_and_info_win.bat
 
 # Stop all services (Linux)
 ./scripts/run_and_info.sh --exit
-
 # Stop all services (Windows)
 scripts\run_and_info_win.bat --exit
 ```
@@ -249,13 +247,29 @@ scripts\run_and_info_win.bat --exit
 
 A new API endpoint is available:
 
-- `POST /api/generate` — Triggers the CLI script in the background. Returns the process output. (For production, restrict this endpoint to admin mode if needed.)
+- `POST /api/generate` — Triggers the CLI script in the background. Returns the process output. 
+
+---
+
+## LLM Provider Setup
+
+The system supports two LLM providers:
+- **KoboldCpp** (local, OpenAI-compatible API)
+- **OpenAI** (cloud)
+
+---
+
+### Configuration
+
+- Default provider: `koboldcpp`
+- To use OpenAI, set `llm_provider` to `openai` in your config or CLI.
+- For KoboldCpp, ensure the API is running and set the correct port (default: 5001).
 
 ---
 
 ## 🧠 Recommended LLM Models for Reasoning (7B–30B)
 
-You can use any of the following models for strong reasoning performance with this app (KoboldCpp, Ollama, etc.):
+You can use any of the following models for strong reasoning performance with this app (KoboldCpp, OpenAI):
 
 1. **Phi-3 Mini (8B)**
    - Excellent reasoning, strong performance for its size.
@@ -290,7 +304,7 @@ You can use any of the following models for strong reasoning performance with th
    - Model: `hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q6_K_XL`
    - This is the default in your app (`--model` argument).
 
-> All of these are available in GGUF format for KoboldCpp and as models for Ollama. For best results, use Q4_K_M or Q6_K_S quantizations for a balance of speed and reasoning quality.
+> All of these are available in GGUF format. For best results, use Q4_K_M or Q6_K_S quantizations for a balance of speed and reasoning quality.
 
 ---
 
@@ -302,5 +316,48 @@ See `LICENSE` for details.
 ## Credits
 - Inspired by best practices from open-source LLM, RAG, and document automation projects.
 - Cloudflare integration modeled after KoboldCpp and similar projects.
+
+---
+
+## 🐳 Docker Entrypoint & Modes
+
+- The Docker image now supports both GUI (web) and CLI (terminal) modes via the `APP_MODE` environment variable.
+- **Default:** `APP_MODE=gui` (FastAPI web UI)
+- To run the CLI pipeline in Docker, set `APP_MODE=cli` in your `.env` or `docker-compose.yml`.
+- The entrypoint script (`scripts/cloudflared-entrypoint.sh`) will launch the correct mode automatically.
+- Example:
+  ```yaml
+  environment:
+    APP_MODE: cli  # or gui
+  ```
+- All other environment variables (LLM, RAG, admin, etc.) are passed through as before.
+
+---
+
+## 🛠️ Process Management & Service Control
+
+- The app now includes robust process management for FastAPI and Cloudflared services.
+- The Docker entrypoint script (`cloudflared-entrypoint.sh`) and Python utilities (`server_utils.py`) will:
+  - Detect and avoid duplicate cloudflared tunnels.
+  - Start cloudflared and FastAPI if not running.
+  - Provide user-friendly status messages and progress bars for tunnel startup.
+  - Allow graceful shutdown of all related services (CLI, Docker, or script).
+- Use the CLI or scripts to start/stop services, or call `shutdown_services()` from Python.
+
+---
+
+## 🧪 Testing & Robustness
+
+- Test utilities are provided for all major pipeline components:
+  - `test_server_utils.py`: Tests process management, health checks, and logging.
+  - `test_pipeline_utils.py`: Tests RAG chunking, OCR, audio transcription, microphone streaming, and LLM chunk analysis.
+  - `test_cli_and_pipeline.py`: Tests CLI argument handling and error cases.
+  - `test_docker_entrypoint.sh`: Tests Docker entrypoint logic for both CLI and GUI modes.
+- To run all tests:
+  ```sh
+  pytest test_src/
+  bash test_src/test_docker_entrypoint.sh
+  ```
+- Ensure `pytest` is installed and run from the project root for correct imports.
 
 ---

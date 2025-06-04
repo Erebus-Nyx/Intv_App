@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='intv-app',
-    version='0.1.0',
+    version='0.2.0',
     description='Web and app with OCR/RAG data retrieval, voice recognition & transcription (fast-whisper with VAR and diarization) for generating CPS interview documentation',
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",    
@@ -17,17 +17,13 @@ setup(
         'pdf2image',
         'pytesseract',
         'torch',  # For CUDA detection
-        'tkinter',
         'psutil',
-        'poppler-utils',
-        'tesseract-ocr',
         'fastapi',
         'uvicorn',
     ],
     entry_points={
         'console_scripts': [
-            'doc-analyze=main:main',
-            'intv=src.main:main',
+            'intv=main:main',
         ],
     },
     classifiers=[

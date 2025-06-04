@@ -5,19 +5,19 @@
 #
 # For more information, see the README.md or project documentation.
 
-# LLM API base URL (Ollama, OpenAI, etc.)
+# LLM API base URL (KoboldCpp, OpenAI)
 llm_api_base: "http://localhost"
 
 # LLM API key (if required)
 # llm_api_key: "your-api-key-here"
 
-# LLM API port (Ollama default: 11434)
-llm_api_port: 11434
+# LLM API port (KoboldCpp default: 5001)
+llm_api_port: 5001
 
-# LLM provider: openai, ollama, koboldcpp, etc.
-llm_provider: "ollama"
+# LLM provider: koboldcpp, openai
+llm_provider: "koboldcpp"  # Options: koboldcpp, openai
 
-# Model name or ID (Ollama default shown)
+# Model name or ID (KoboldCpp default shown)
 model: "hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M"
 
 # Use external RAG service (true/false)

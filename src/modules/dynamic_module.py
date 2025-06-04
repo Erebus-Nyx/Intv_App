@@ -73,7 +73,94 @@ def dynamic_module_output(lookup_id=None, output_path=None, module_key=None, pro
         if val.strip() == '' and default:
             return default
         return val
-    resolved = resolve_variables(lookup_id, logic_tree, db_lookup, user_prompt, provided=provided_data)
+
+    # --- LLM Variable Extraction Step (with timeout) ---
+    llm_vars = {}
+    try:
+        # Try to load document text from lookup_id (file path)
+        doc_text = None
+        if lookup_id and os.path.exists(lookup_id):
+            ext = os.path.splitext(lookup_id)[1].lower()
+            if ext == '.txt':
+                with open(lookup_id, 'r', encoding='utf-8') as f:
+                    doc_text = f.read()
+            elif ext == '.docx':
+                try:
+                    import docx
+                    doc = docx.Document(lookup_id)
+                    doc_text = '\n'.join([p.text for p in doc.paragraphs])
+                except Exception as e:
+                    print(f"[WARNING] Could not read DOCX: {e}")
+            elif ext == '.pdf':
+                try:
+                    import PyPDF2
+                    with open(lookup_id, 'rb') as f:
+                        reader = PyPDF2.PdfReader(f)
+                        doc_text = '\n'.join(page.extract_text() or '' for page in reader.pages)
+                except Exception as e:
+                    print(f"[WARNING] Could not read PDF: {e}")
+        # Only proceed if we have document text
+        if doc_text:
+            from intv_app.llm import analyze_chunks
+            var_list = list(logic_tree.keys())
+            extraction_prompt = (
+                f"Extract as many of the following variables as possible from the document below. "
+                f"Output as a JSON object with variable names as keys.\n"
+                f"Variables: {var_list}\n"
+                f"Document: {doc_text}"
+            )
+            # Use model and API info from environment or defaults
+            model = os.environ.get('LLM_MODEL', 'hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q6_K_XL')
+            api_base = os.environ.get('LLM_API_BASE', 'http://localhost')
+            api_port = int(os.environ.get('LLM_API_PORT', '5001'))
+            # Always use koboldcpp as provider
+            provider = 'koboldcpp'
+            print(f"[DEBUG] LLM extraction config: provider={provider}, api_base={api_base}, api_port={api_port}, model={model}")
+            # Force api_port to 5001 if provider is koboldcpp and port is 5001
+            if provider == 'koboldcpp' and str(api_port) == '5001':
+                api_port = 5001
+                print(f"[DEBUG] Overriding api_port to 5001 for koboldcpp backend.")
+            import signal
+            class TimeoutException(Exception):
+                pass
+            def handler(signum, frame):
+                raise TimeoutException()
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(60)  # 60 second timeout
+            try:
+                llm_output = analyze_chunks([extraction_prompt], model=model, api_base=api_base, api_port=api_port, provider=provider)
+                signal.alarm(0)
+            except TimeoutException:
+                print("[ERROR] LLM extraction timed out after 60 seconds.")
+                llm_output = None
+            except Exception as e:
+                print(f"[ERROR] LLM extraction failed: {e}")
+                llm_output = None
+            finally:
+                signal.alarm(0)
+            if llm_output:
+                print("[DEBUG] Raw LLM extraction output:\n", llm_output)
+                try:
+                    import json as _json
+                    llm_vars = _json.loads(llm_output)
+                    print("[INFO] LLM-extracted variable values:")
+                    for k, v in llm_vars.items():
+                        print(f"  {k}: {v}")
+                    # Print the first 5 variables and their values
+                    first5 = list(llm_vars.keys())[:5]
+                    print("[DEBUG] First 5 variables and their values from LLM:")
+                    for k in first5:
+                        print(f"  {k}: {llm_vars[k]}")
+                except Exception as e:
+                    print(f"[WARNING] Could not parse LLM output as JSON: {e}")
+                    llm_vars = {}
+    except Exception as e:
+        print(f"[WARNING] LLM variable extraction failed: {e}")
+        llm_vars = {}
+    # Merge with provided_data if any
+    if provided_data:
+        llm_vars.update(provided_data)
+    resolved = resolve_variables(lookup_id, logic_tree, db_lookup, user_prompt, provided=llm_vars)
     for k, v in resolved.items():
         set_llm_variable(str(lookup_id), k, v)
     # Add abbreviation reference to the top of the narrative for LLM context, only if not empty
@@ -117,6 +204,30 @@ def dynamic_module_output(lookup_id=None, output_path=None, module_key=None, pro
             deduped_lines.append(line)
             seen.add(line)
     narrative = "\n".join(deduped_lines)
+
+    # --- Post-processing: Suppress prompts for variables present in narrative (fuzzy match) ---
+    suppressed_questions = []
+    filtered_pending_questions = []
+    for q in pending_questions:
+        # Try to extract the variable/section name from the question
+        # Example: "Please provide a value for Name." -> "Name"
+        match = re.search(r"for ([^\.]+)", q)
+        if match:
+            var_label = match.group(1).strip().lower()
+            # Fuzzy match: check if var_label or a close variant appears in the narrative
+            found = False
+            for line in deduped_lines:
+                if var_label in line.lower() or (var_label.replace(' ', '') in line.lower().replace(' ', '')):
+                    found = True
+                    break
+            if found:
+                suppressed_questions.append(q)
+                continue
+        filtered_pending_questions.append(q)
+    if suppressed_questions:
+        print(f"[INFO] Suppressed clarification prompts for variables already present: {suppressed_questions}")
+    pending_questions = filtered_pending_questions
+    clarification_needed = bool(pending_questions)
     result = {
         "status": "pending" if clarification_needed else "success",
         # Use ensure_ascii=False and indent=2 for pretty output, and keep real line breaks
@@ -162,4 +273,24 @@ def dynamic_module_output(lookup_id=None, output_path=None, module_key=None, pro
                 print(f"[INFO] Output saved to {save_path}")
         except Exception as e:
             print(f"[WARNING] Could not open save dialog: {e}")
+        sys.exit(0)
+    # After result is built, check for new abbreviations from LLM output
+    # If the LLM output (result) contains a key 'new_abbreviations', append them to abbreviation_reference.json
+    new_abbrevs = result.get('new_abbreviations') if isinstance(result, dict) else None
+    if new_abbrevs and isinstance(new_abbrevs, dict):
+        abbrev_path = os.path.join(os.path.dirname(__file__), "abbreviation_reference.json")
+        try:
+            with open(abbrev_path, "r", encoding="utf-8") as f:
+                abbrevs = json.load(f)
+        except Exception:
+            abbrevs = {}
+        updated = False
+        for k, v in new_abbrevs.items():
+            if k not in abbrevs:
+                abbrevs[k] = v
+                updated = True
+        if updated:
+            with open(abbrev_path, "w", encoding="utf-8") as f:
+                json.dump(abbrevs, f, indent=4, ensure_ascii=False)
+            print(f"[INFO] Appended new abbreviations to abbreviation_reference.json: {list(new_abbrevs.keys())}")
     return result
