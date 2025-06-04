@@ -16,9 +16,10 @@ def preprocess_image(
 ) -> Image.Image:
     """
     Preprocess an image for OCR: binarization, denoising, resizing.
-    - binarize: convert to grayscale and apply thresholding
-    - denoise: apply median filter
-    - resize: resize to given (width, height)
+    - binarize: convert to grayscale and apply thresholding (autocontrast + binary)
+    - denoise: apply median filter to reduce noise
+    - resize: resize to given (width, height) if provided
+    Returns a processed PIL Image ready for OCR.
     """
     if resize:
         img = img.resize(resize, Image.LANCZOS)
@@ -38,7 +39,7 @@ def ocr_image(
 ) -> str:
     """
     Run OCR on a PIL image with pytesseract.
-    Returns extracted text (str).
+    Returns extracted text (str). Logs warning if output is empty or too short.
     """
     try:
         text = pytesseract.image_to_string(img, lang=lang, config=config)

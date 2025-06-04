@@ -22,7 +22,10 @@ DEFAULT_CHUNK_OVERLAP = 100
 
 # --- File Validation ---
 def is_valid_filetype(file_path: str) -> bool:
-    """Check if the file type is valid for RAG processing."""
+    """
+    Check if the file type is valid for RAG processing.
+    Accepts PDF, DOCX, TXT, and common text-like MIME types.
+    """
     ext = os.path.splitext(file_path)[1].lower()
     if ext in VALID_FILETYPES:
         return True
@@ -32,7 +35,10 @@ def is_valid_filetype(file_path: str) -> bool:
     return False
 
 def validate_file(file_path: str, max_size_mb: int = 50) -> None:
-    """Raise if file is invalid or too large."""
+    """
+    Raise if file is invalid or too large.
+    Logs errors for missing, invalid, or oversized files.
+    """
     if not os.path.isfile(file_path):
         logging.error(f"File not found: {file_path}")
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -46,7 +52,10 @@ def validate_file(file_path: str, max_size_mb: int = 50) -> None:
 
 # --- Chunking ---
 def chunk_text(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE, overlap: int = DEFAULT_CHUNK_OVERLAP) -> List[str]:
-    """Chunk text with overlap."""
+    """
+    Chunk text with overlap for RAG processing.
+    Returns a list of text chunks, each of size chunk_size with overlap.
+    """
     chunks = []
     i = 0
     while i < len(text):

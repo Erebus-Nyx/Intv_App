@@ -9,6 +9,7 @@ from pathlib import Path
 def download_model_if_needed(model_size: str, models_dir: str = "models") -> str:
     """
     Ensure the Whisper model is present in the models directory. Download if missing.
+    Downloads from HuggingFace if not found locally, with progress bar.
     Returns the path to the model directory.
     """
     model_path = Path(models_dir) / model_size

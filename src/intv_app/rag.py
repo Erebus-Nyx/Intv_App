@@ -13,6 +13,9 @@ try:
 except ImportError:
     docx = None
 
+# --- RAG Pipeline Core Functions ---
+# These functions handle document chunking, prompt loading, and RAG orchestration.
+
 # 2. Set default chunk size/overlap and logging config
 DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 100
@@ -33,7 +36,10 @@ DEFAULT_POLICY_PROMPT = """You are a helpful assistant. Provide a concise and ac
 
 # 4. Load policy prompt from YAML (already present, just ensure import and fallback)
 def load_policy_prompt(yaml_path=None):
-    """Load the policy prompt from policy_prompt.yaml for RAG/LLM continuity."""
+    """
+    Load the policy prompt from policy_prompt.yaml for RAG/LLM continuity.
+    If not found or invalid, falls back to DEFAULT_POLICY_PROMPT.
+    """
     if yaml_path is None:
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config'))
         yaml_path = os.path.join(base_dir, 'policy_prompt.yaml')

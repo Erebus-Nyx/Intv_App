@@ -1,6 +1,7 @@
 def analyze_chunks(chunks, model=None, api_base=None, api_key=None, api_port=None, provider=None, extra_params=None):
     """
-    Minimal stub for analyze_chunks. Replace with actual LLM integration as needed.
+    Analyze a list of text chunks using the selected LLM provider.
+    This stub echoes the input chunks for now. Replace with actual LLM integration as needed.
     Returns a list of dicts with 'output' for each chunk.
     """
     # This stub just echoes the input chunks for now

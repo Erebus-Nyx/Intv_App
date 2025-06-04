@@ -1,4 +1,4 @@
-print("[DEBUG] main.py is executing.")
+# Main entry point for the Intv_App CLI and pipeline
 import argparse
 from intv_app.utils import is_valid_filetype
 from intv_app.rag import chunk_text, chunk_document, batch_chunk_documents, process_with_retriever_and_llm
@@ -15,9 +15,10 @@ from intv_app.server_utils import ensure_fastapi_running, ensure_cloudflared_run
 from intv_app.audio_transcribe import transcribe_audio_fastwhisper
 from intv_app.module_utils import get_available_interview_types, detect_filetype_from_extension
 
+
 def main():
     args = parse_args()
-    print(f"[DEBUG] Parsed args: {args}")
+    # Parse CLI arguments and handle file dialog if requested
 
     # --- Handle --file-dialog (must be before file logic) ---
     if getattr(args, 'file_dialog', False):
@@ -51,45 +52,38 @@ def main():
         ensure_fastapi_running()
         ensure_cloudflared_running()
 
-    # Handle --tunnelinfo argument
+    # --- Handle tunnel info: print all cached Cloudflared tunnel URLs and exit ---
     if getattr(args, 'tunnelinfo', False):
         import glob
-        import os
+        # Print all cached Cloudflared tunnel URLs for user reference
         cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
         url_files = glob.glob(os.path.join(cache_dir, 'cloudflared_url_*.txt'))
         if not url_files:
             print("[INFO] No Cloudflared tunnel link found in .cache.")
             sys.exit(0)
-        # Print all found links
         for url_file in url_files:
             with open(url_file, 'r', encoding='utf-8') as f:
                 link = f.read().strip()
                 print(f"[Cloudflared Tunnel] {os.path.basename(url_file)}: {link}")
         sys.exit(0)
-    # Handle --remotetunnel argument
+
     if getattr(args, 'remotetunnel', False):
-        import subprocess
-        import re
+        # Start a new cloudflared tunnel if needed, print public URL
+        import subprocess, re, shutil, psutil
         from datetime import datetime
-        import os
-        import shutil
-        import psutil
         cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
         os.makedirs(cache_dir, exist_ok=True)
-        port = 3773  # Default FastAPI port
-        # Check if cloudflared is already running (hardened: skip zombies/defunct)
+        port = 3773
         def is_process_running(name):
+            # Check if a process with the given name is running and not defunct
             for proc in psutil.process_iter(['name', 'cmdline', 'status']):
                 try:
-                    if (
-                        (name in proc.info['name'] or (proc.info['cmdline'] and any(name in c for c in proc.info['cmdline'])))
-                        and proc.info.get('status', '').lower() not in ('zombie', 'defunct')
-                    ):
+                    if ((name in proc.info['name'] or (proc.info['cmdline'] and any(name in c for c in proc.info['cmdline'])))
+                        and proc.info.get('status', '').lower() not in ('zombie', 'defunct')):
                         return True
                 except Exception:
                     continue
             return False
-        # Check for cached URLs
         url_files = []
         try:
             url_files = [f for f in os.listdir(cache_dir) if f.startswith('cloudflared_url_') and f.endswith('.txt')]
@@ -105,17 +99,14 @@ def main():
                         print(f"[Cloudflared Tunnel] {url_file}: {link}")
                 sys.exit(0)
             else:
-                # If no cached URL and process is running, warn and allow new tunnel
                 print("[WARN] Cloudflared process detected but no cached URL found. Starting a new tunnel anyway...")
         elif url_files:
-            # If no process but cache exists, warn and allow new tunnel
             print("[WARN] Cached Cloudflared URL(s) found but no process running. Removing stale cache and starting new tunnel...")
             for url_file in url_files:
                 try:
                     os.remove(os.path.join(cache_dir, url_file))
                 except Exception:
                     pass
-        # Find cloudflared binary robustly
         cloudflared_bin = shutil.which('cloudflared')
         if not cloudflared_bin:
             alt_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../scripts/cloudflared-linux-amd64'))
@@ -127,9 +118,7 @@ def main():
         # Kill any zombie/defunct cloudflared processes before starting a new tunnel
         for proc in psutil.process_iter(['name', 'cmdline', 'status']):
             try:
-                if (
-                    'cloudflared' in proc.info['name'] or (proc.info['cmdline'] and any('cloudflared' in c for c in proc.info['cmdline']))
-                ) and proc.info.get('status', '').lower() in ('zombie', 'defunct'):
+                if ('cloudflared' in proc.info['name'] or (proc.info['cmdline'] and any('cloudflared' in c for c in proc.info['cmdline']))) and proc.info.get('status', '').lower() in ('zombie', 'defunct'):
                     proc.kill()
             except Exception:
                 pass
@@ -138,6 +127,7 @@ def main():
             cloudflared_bin, 'tunnel', '--url', f'http://localhost:{port}'
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         public_url = None
+        # Parse cloudflared output for the public URL and verify reachability
         for line in proc.stdout:
             if "trycloudflare.com" in line:
                 print(line, end="")
@@ -145,14 +135,12 @@ def main():
                 if m:
                     public_url = m.group(1)
                     print(f"[Cloudflared] Public URL: {public_url}")
-                    # Verify the public URL is reachable before caching (retry up to 5 times)
-                    import requests
-                    import time as _time
+                    import requests, time as _time
                     for attempt in range(5):
                         try:
                             resp = requests.get(public_url, timeout=10)
                             if resp.status_code < 400:
-                                break  # Success
+                                break
                             else:
                                 print(f"[WARN] Cloudflared public URL returned HTTP {resp.status_code} (attempt {attempt+1}/5). Retrying...")
                         except Exception as e:
@@ -178,12 +166,10 @@ def main():
             print("[ERROR] No valid Cloudflared public URL was established. Please check your tunnel and try again.")
             sys.exit(1)
         sys.exit(0)
-    # Handle shutdown immediately after parsing args
+
+    # --- Handle shutdown: stop all background services and clean up ---
     if getattr(args, 'shutdown', False):
-        import subprocess
-        import platform
-        import glob
-        import os
+        import subprocess, platform, glob
         if platform.system().lower().startswith('win'):
             script = 'scripts/run_and_info_win.bat'
             cmd = [script, '--exit']
@@ -192,7 +178,6 @@ def main():
             cmd = ['bash', script, '--exit']
         print(f"[INFO] Shutting down FastAPI and Cloudflared using {script} ...")
         subprocess.run(cmd)
-        # Remove cached tunnel URLs after shutdown
         cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
         url_files = glob.glob(os.path.join(cache_dir, 'cloudflared_url_*.txt'))
         for url_file in url_files:
@@ -202,12 +187,15 @@ def main():
                 pass
         print("[INFO] Removed cached Cloudflared tunnel URLs from .cache.")
         sys.exit(0)
+
+    # --- Validate audio/mic arguments ---
     sources = [s for s in [args.audio, args.mic] if s]
     if len(sources) > 1:
         print("[ERROR] Multiple audio sources provided. Please specify only one of --audio or --mic.")
         print("Usage: --audio <file> OR --mic (not both)")
         sys.exit(1)
-    # File format detection logic
+
+    # --- Detect file type if not provided ---
     if args.file:
         file_path = Path(args.file)
         # Auto-detect format if not provided
@@ -218,7 +206,8 @@ def main():
             except ValueError as e:
                 print(f"[ERROR] {e}")
                 sys.exit(1)
-    # --- Handle --mic: record, transcribe, and cache before LLM ---
+
+    # --- Microphone streaming not implemented (placeholder for future feature) ---
     if getattr(args, 'mic', False):
         from datetime import datetime
         # Placeholder: streaming microphone transcription is not implemented
@@ -239,8 +228,7 @@ def main():
         # return
     # --- Handle --audio: transcribe and cache before RAG ---
     if getattr(args, 'audio', False):
-        import importlib.util
-        import datetime
+        import importlib.util, datetime
         audio_path = args.audio
         print(f"[INFO] Transcribing audio file: {audio_path}")
         # Dynamically import audio_transcribe
@@ -259,7 +247,6 @@ def main():
         diarize_spec.loader.exec_module(audio_diarization)
         # Transcribe audio
         segments = audio_transcribe.transcribe_audio_fastwhisper(audio_path)
-        # Diarize audio (speaker labels)
         try:
             diarization = audio_diarization.diarize_audio(audio_path)
         except Exception as e:
@@ -284,18 +271,13 @@ def main():
         args.file = str(cache_path)
         args.format = 'json'
 
-    print("[DEBUG] Starting RAG/LLM pipeline")
-    # Get dynamic interview/module types
-    print("[DEBUG] Getting available interview types")
+    # --- Main RAG/LLM pipeline logic ---
     available_types = get_available_interview_types()
     type_keys = [t['key'] for t in available_types]
-    print(f"[DEBUG] Available types: {type_keys}")
     if not available_types:
         print("[ERROR] No modules found. Ensure *_vars.json files exist in src/modules/.")
         sys.exit(1)
-    # Menu for interview type selection if not provided
     if not args.type or args.type not in type_keys:
-        print("[DEBUG] Prompting for interview/module type selection")
         print("\nSelect an interview/module type:")
         menu_types = []
         for idx, t in enumerate(available_types, 1):
@@ -313,20 +295,19 @@ def main():
             return
         args.type = available_types[int(choice)-1]['key']
 
+    # --- Validate input file and chunk document ---
     if args.file:
         file_path = Path(args.file)
-        print(f"[DEBUG] Input file: {file_path}")
         if not file_path.exists() or not is_valid_filetype(file_path, args.format):
             print(f"[ERROR] Invalid file or file format: {file_path}, {args.format}")
             raise ValueError('Invalid file or file format')
         try:
-            print(f"[DEBUG] Chunking document: {file_path} as {args.format}")
             chunks = chunk_document(file_path, args.format)
-            print(f"[DEBUG] Document chunked into {len(chunks)} chunks")
         except NotImplementedError as e:
             print(f"[ERROR] {e}")
             sys.exit(1)
 
+    # --- Show progress indicator for RAG processing ---
     def show_rag_progress():
         import time
         count = 0
@@ -341,13 +322,11 @@ def main():
         # Placeholder: Launch web server here in the future
     else:
         print("[INFO] Terminal mode (default)")
-    # Start RAG progress indicator in a thread (only after chunks is defined)
-    print("[DEBUG] Starting RAG progress thread")
     progress_thread = threading.Thread(target=show_rag_progress)
     progress_thread.start()
 
+    # --- RAG pipeline: external or embedded mode ---
     if args.rag_mode == 'external':
-        print("[DEBUG] Using external RAG mode")
         rag_results = process_with_retriever_and_llm(
             chunks,
             mode=args.rag_mode,
@@ -355,20 +334,14 @@ def main():
             file_path=str(file_path)
         )
     else:
-        print("[DEBUG] Using embedded RAG mode")
         rag_results = process_with_retriever_and_llm(chunks, mode=args.rag_mode)
-    print(f"[DEBUG] RAG results: {rag_results if len(str(rag_results)) < 500 else '[truncated]'}")
 
-    # Signal progress thread to stop
     show_rag_progress.done = True
     progress_thread.join()
 
-    # Load config and optionally override with command-line args
-    print("[DEBUG] Loading config")
+    # --- Load config and override with CLI args if provided ---
     from config import load_config, save_config
     config = load_config()
-    # Load from YAML if present
-    import os
     yaml_path = os.path.join(os.path.dirname(__file__), '../config/config.yaml')
     if os.path.exists(yaml_path):
         with open(yaml_path, 'r', encoding='utf-8') as f:
@@ -411,7 +384,7 @@ def main():
         if cutlass_available:
             extra_params['cutlass'] = True
 
-    # --- Koboldcpp model info check (if using koboldcpp) ---
+    # --- Query backend for model info if using koboldcpp ---
     backend_info = {}
     if config.get('llm_provider', '').lower() == 'koboldcpp':
         import requests
@@ -439,8 +412,6 @@ def main():
     else:
         backend_info['koboldcpp_model'] = None
 
-    print(f"[DEBUG] LLM provider: {config.get('llm_provider')}, LLM port: {config.get('llm_api_port')}, LLM base: {config.get('llm_api_base')}")
-    print(f"[DEBUG] Calling analyze_chunks with {len(rag_results)} chunks")
     llm_output = analyze_chunks(
         rag_results,
         model=config['model'],
@@ -450,14 +421,13 @@ def main():
         provider=config['llm_provider'],
         extra_params=extra_params if extra_params else None
     )
-    print(f"[DEBUG] LLM output: {llm_output if len(str(llm_output)) < 500 else '[truncated]'}")
 
     # Always treat each run as a unique instance: clear any cached LLM variable values for this file/interview
     from llm_db import clear_llm_variables
     if args.file:
         clear_llm_variables(str(args.file))
 
-    # After menu selection, call the corresponding module
+    # --- Call the selected module for postprocessing/output ---
     if not getattr(args, 'gui', False):
         from modules.dynamic_module import dynamic_module_output
         module_key = args.type
@@ -475,7 +445,7 @@ def main():
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return
 
-    # --- RAG+LLM pipeline integration ---
+    # --- Optionally run the full RAG+LLM pipeline for the selected module ---
     from intv_app.llm import rag_llm_pipeline
     if args.file and args.type and not getattr(args, 'gui', False):
         rag_llm_pipeline(

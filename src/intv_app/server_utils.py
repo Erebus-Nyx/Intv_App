@@ -9,12 +9,18 @@ except ImportError:
     psutil = None
 
 def is_port_in_use(port):
-    """Check if a port is in use on localhost."""
+    """
+    Check if a port is in use on localhost.
+    Returns True if the port is open, False otherwise.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', port)) == 0
 
 def ensure_fastapi_running(port=3773):
-    """Ensure FastAPI server is running on the given port. Start if not running."""
+    """
+    Ensure FastAPI server is running on the given port. Start if not running.
+    Launches uvicorn if needed.
+    """
     if not is_port_in_use(port):
         subprocess.Popen(['uvicorn', 'intv_app.api:app', '--port', str(port)])
         print(f"[server_utils] Started FastAPI on port {port}")
@@ -41,7 +47,7 @@ def ensure_cloudflared_running(port=3773, wait_for_url=True, progress=True):
                     continue
             return False
         else:
-            # Fallback: use pgrep
+            # Fallback: use pgrep if psutil is not available
             return subprocess.call(['pgrep', '-f', 'cloudflared'], stdout=subprocess.DEVNULL) == 0
 
     if is_cloudflared_running():
