@@ -18,6 +18,7 @@ from .audio_transcribe import transcribe_audio_fastwhisper
 from .audio_diarization import diarize_audio
 from .llm import rag_llm_pipeline, analyze_chunks
 from .config import load_config
+from .intelligent_document_processor import IntelligentDocumentProcessor, ExtractionMethod, ExtractionQuality
 
 
 class InputType(Enum):
@@ -42,6 +43,10 @@ class ProcessingResult:
     llm_output: Optional[Dict] = None
     error_message: Optional[str] = None
     metadata: Optional[Dict] = None
+    # New fields for intelligent processing
+    extraction_method: Optional[str] = None
+    extraction_quality: Optional[str] = None
+    confidence_score: Optional[float] = None
 
 
 class PipelineOrchestrator:
@@ -53,6 +58,9 @@ class PipelineOrchestrator:
         """Initialize the pipeline orchestrator"""
         self.config = load_config(config_path) if config_path else load_config()
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize intelligent document processor
+        self.doc_processor = IntelligentDocumentProcessor(config_path)
         
         # Configure logging if not already done
         if not self.logger.handlers:
@@ -100,34 +108,42 @@ class PipelineOrchestrator:
     
     def process_document(self, file_path: Union[str, Path]) -> ProcessingResult:
         """
-        Process document through RAG pipeline
+        Process document through intelligent pathway
+        Uses the new intelligent document processor to determine the best extraction method
         """
         try:
-            self.logger.info(f"Processing document: {file_path}")
+            self.logger.info(f"Processing document with intelligent pathway: {file_path}")
             
-            # Chunk the document
-            chunks = chunk_document(str(file_path), config=self.config)
+            # Use intelligent document processor
+            extraction_result = self.doc_processor.process_document(file_path)
             
-            if not chunks:
+            if not extraction_result.success:
                 return ProcessingResult(
                     success=False,
                     input_type=InputType.DOCUMENT,
-                    error_message="No text could be extracted from document"
+                    error_message=extraction_result.error_message,
+                    extraction_method=extraction_result.method_used.value if extraction_result.method_used else None,
+                    extraction_quality=extraction_result.quality.value if extraction_result.quality else None,
+                    confidence_score=extraction_result.confidence_score
                 )
             
-            # Extract full text
-            extracted_text = "\n".join(chunks)
-            
-            self.logger.info(f"Document chunked into {len(chunks)} chunks")
+            self.logger.info(f"Document processed successfully using {extraction_result.method_used.value} "
+                           f"with {extraction_result.quality.value} quality "
+                           f"(confidence: {extraction_result.confidence_score:.2f})")
             
             return ProcessingResult(
                 success=True,
                 input_type=InputType.DOCUMENT,
-                extracted_text=extracted_text,
-                chunks=chunks,
+                extracted_text=extraction_result.extracted_text,
+                chunks=extraction_result.chunks,
+                extraction_method=extraction_result.method_used.value,
+                extraction_quality=extraction_result.quality.value,
+                confidence_score=extraction_result.confidence_score,
                 metadata={
-                    'num_chunks': len(chunks),
-                    'total_length': len(extracted_text)
+                    'num_chunks': len(extraction_result.chunks) if extraction_result.chunks else 0,
+                    'total_length': len(extraction_result.extracted_text) if extraction_result.extracted_text else 0,
+                    'extraction_details': extraction_result.extraction_details,
+                    **(extraction_result.metadata if extraction_result.metadata else {})
                 }
             )
             
