@@ -1,13 +1,13 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='intv-app',
+    name='intv',
     version='0.2.0',
     description='Web and app with OCR/RAG data retrieval, voice recognition & transcription (fast-whisper with VAR and diarization) for generating CPS interview documentation',
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",    
     author='David Anderson',
-    url="https://github.com/ErebusNyx/Intv_App",
+    url="https://github.com/ErebusNyx/INTV",
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
     install_requires=[

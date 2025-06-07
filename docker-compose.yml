@@ -4,13 +4,13 @@
 
 
 services:
-  intv_app:
+  intv:
     build:
       context: .
       dockerfile: docker/Dockerfile.gpu
     # erebusnyx/intv-app-gpu:latest
     image: docker.io/library/intv-app-gpu:latest
-    container_name: intv_app
+    container_name: intv
     restart: unless-stopped
     stdin_open: true
     tty: true
@@ -43,7 +43,7 @@ services:
     networks:
       vLAN:
         aliases:
-          - intv_app
+          - intv
     logging:
       driver: "json-file"
       options:

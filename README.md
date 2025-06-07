@@ -1,4 +1,4 @@
-# Intv_App: Interview Automation & Document Analysis
+# INTV: Interview Automation & Document Analysis
 
 > **Warning**
 > 
@@ -10,7 +10,7 @@ This project provides a robust, modular system for document analysis using Retri
 
 ## ⚠️ Host System Dependencies (Local/Non-Docker Installs)
 
-Before running Intv_App locally (outside Docker), you **must** install the following system packages and tools on your host:
+Before running INTV locally (outside Docker), you **must** install the following system packages and tools on your host:
 
 > **Note:** If you use the Linux startup script (`scripts/run_and_info.sh`), all required apt packages will be automatically installed for you on first run. You may still review the list below for reference or for manual setup.
 

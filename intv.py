@@ -36,7 +36,7 @@ def main():
     parser.add_argument('--output-format', choices=['txt', 'json'], default='txt', help='Transcription output format')
     parser.add_argument('--defaults', action='store_true', help='Bypass data source and use default values for all variables')
     parser.add_argument('--remotetunnel', action='store_true', help='Start a Cloudflare tunnel for remote access')
-    parser.add_argument('--shutdown', action='store_true', help='Shutdown all running Intv_App services and exit')
+    parser.add_argument('--shutdown', action='store_true', help='Shutdown all running INTV services and exit')
     parser.set_defaults(disable_cuda=False)
     args = parser.parse_args()
 
@@ -45,7 +45,7 @@ def main():
         import signal
         import os
         import sys
-        print("[INFO] Shutting down all Intv_App services...")
+        print("[INFO] Shutting down all INTV services...")
         try:
             subprocess.run(["pkill", "-f", "run_and_info"], check=False)
             subprocess.run(["pkill", "-f", "cloudflared"], check=False)
@@ -83,7 +83,7 @@ def main():
 if __name__ == '__main__':
     import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent / 'src/intv_app'))
+    sys.path.insert(0, str(Path(__file__).parent / 'intv'))
     import importlib
     cli_module = importlib.import_module('cli')
     cli_module.main()

@@ -1,4 +1,4 @@
-# config.yaml - User configuration for Intv_App
+# config.yaml - User configuration for INTV
 #
 # This file contains all user-editable settings for the CLI and LLM/RAG system.
 # Place this file in the config/ directory. Edit as needed to set defaults for your environment.

@@ -1,8 +1,8 @@
-# Main entry point for the Intv_App CLI and pipeline
+# Main entry point for the INTV CLI and pipeline
 import argparse
-from intv_app.utils import is_valid_filetype
-from intv_app.rag import chunk_text, chunk_document, batch_chunk_documents, process_with_retriever_and_llm
-from intv_app.llm import analyze_chunks
+from intv.utils import is_valid_filetype
+from intv.rag import chunk_text, chunk_document, batch_chunk_documents, process_with_retriever_and_llm
+from intv.llm import analyze_chunks
 import yaml
 import sys
 import os
@@ -10,10 +10,10 @@ import json
 import threading
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
-from intv_app.cli import parse_cli_args as parse_args
-from intv_app.server_utils import ensure_fastapi_running, ensure_cloudflared_running
-from intv_app.audio_transcribe import transcribe_audio_fastwhisper
-from intv_app.module_utils import get_available_interview_types, detect_filetype_from_extension
+from intv.cli import parse_cli_args as parse_args
+from intv.server_utils import ensure_fastapi_running, ensure_cloudflared_running
+from intv.audio_transcribe import transcribe_audio_fastwhisper
+from intv.module_utils import get_available_interview_types, detect_filetype_from_extension
 
 
 def main():
@@ -234,14 +234,14 @@ def main():
         # Dynamically import audio_transcribe
         transcribe_spec = importlib.util.spec_from_file_location(
             "audio_transcribe",
-            str(Path(__file__).parent / "intv_app" / "audio_transcribe.py")
+            str(Path(__file__).parent.parent / "intv" / "audio_transcribe.py")
         )
         audio_transcribe = importlib.util.module_from_spec(transcribe_spec)
         transcribe_spec.loader.exec_module(audio_transcribe)
         # Dynamically import audio_diarization
         diarize_spec = importlib.util.spec_from_file_location(
             "audio_diarization",
-            str(Path(__file__).parent / "intv_app" / "audio_diarization.py")
+            str(Path(__file__).parent.parent / "intv" / "audio_diarization.py")
         )
         audio_diarization = importlib.util.module_from_spec(diarize_spec)
         diarize_spec.loader.exec_module(audio_diarization)
@@ -446,7 +446,7 @@ def main():
         return
 
     # --- Optionally run the full RAG+LLM pipeline for the selected module ---
-    from intv_app.llm import rag_llm_pipeline
+    from intv.llm import rag_llm_pipeline
     if args.file and args.type and not getattr(args, 'gui', False):
         rag_llm_pipeline(
             document_path=args.file,

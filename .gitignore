@@ -40,6 +40,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# LLM models and data
+.models/
+*.gguf
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
@@ -116,6 +120,9 @@ node_modules/
 *.sqlite3
 *.pdf
 *.docx
+*.mp4
+*.m4a
+
 
 # Ignore cloudflared tunnel credentials except config and src
 *.json
