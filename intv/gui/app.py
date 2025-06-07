@@ -21,7 +21,7 @@ import base64
 import requests
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from typing import Optional
-from src.config import load_config
+from ..config import load_config
 from fastapi import Security
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import shutil
@@ -32,7 +32,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse as StarlettePlainTextResponse
 from fastapi import BackgroundTasks
 import platform
-from intv.main import get_available_interview_types
+from ..module_utils import get_available_interview_types
 
 # Secret key for session cookies
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_urlsafe(32))
@@ -200,8 +200,31 @@ async def docs_redirect(request: Request):
 
 def main():
     """Entry point for intv-gui command."""
-    port = int(os.environ.get("PORT", 3773))
-    uvicorn.run("intv.gui.app:app", host="0.0.0.0", port=port, reload=False)
+    import argparse
+    import sys
+    
+    parser = argparse.ArgumentParser(description="INTV Web GUI - FastAPI-based web interface")
+    parser.add_argument("--port", type=int, default=3773, help="Port to run the server on (default: 3773)")
+    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
+    parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
+    parser.add_argument("--version", action="version", version="intv-gui 0.2.0")
+    
+    # Check for help first
+    if "--help" in sys.argv or "-h" in sys.argv:
+        parser.print_help()
+        sys.exit(0)
+    
+    args = parser.parse_args()
+    
+    port = args.port or int(os.environ.get("PORT", 3773))
+    host = args.host
+    reload = args.reload
+    
+    print(f"Starting INTV Web GUI on {host}:{port}")
+    print(f"Access the interface at: http://{host}:{port}")
+    print("Press Ctrl+C to stop the server")
+    
+    uvicorn.run("intv.gui.app:app", host=host, port=port, reload=reload)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 3773))

@@ -190,3 +190,71 @@ def preprocess_image(image_path: str, output_path: str = None) -> str:
     except Exception as e:
         logging.error(f"Image preprocessing failed: {e}")
         return image_path  # Return original path if preprocessing fails
+
+
+def main():
+    """Entry point for intv-ocr command"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="INTV OCR - Extract text from images and PDFs",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    
+    parser.add_argument('input', help='Path to image or PDF file')
+    parser.add_argument('-o', '--output', help='Output text file path (optional)')
+    parser.add_argument('--config', default='--psm 6', help='Tesseract configuration string')
+    parser.add_argument('--preprocess', action='store_true', help='Apply image preprocessing before OCR')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
+    
+    args = parser.parse_args()
+    
+    if args.verbose:
+        logging.basicConfig(level=logging.INFO)
+    
+    try:
+        input_path = args.input
+        
+        # Check if file exists
+        if not os.path.exists(input_path):
+            print(f"Error: File not found: {input_path}")
+            return 1
+        
+        # Determine file type and process
+        if input_path.lower().endswith('.pdf'):
+            print(f"Processing PDF: {input_path}")
+            text = ocr_pdf(input_path, config_string=args.config)
+        elif input_path.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp')):
+            print(f"Processing image: {input_path}")
+            
+            # Apply preprocessing if requested
+            if args.preprocess:
+                print("Applying image preprocessing...")
+                input_path = preprocess_image(input_path)
+            
+            text = ocr_image(input_path, config_string=args.config)
+        else:
+            print(f"Error: Unsupported file type: {input_path}")
+            print("Supported formats: PDF, PNG, JPG, JPEG, TIFF, BMP")
+            return 1
+        
+        # Output results
+        if args.output:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print(f"Text extracted and saved to: {args.output}")
+        else:
+            print("Extracted text:")
+            print("-" * 50)
+            print(text)
+        
+        return 0
+        
+    except Exception as e:
+        print(f"Error processing file: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())

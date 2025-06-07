@@ -162,7 +162,6 @@ import importlib.util
 vad_spec = importlib.util.spec_from_file_location("audio_vad", str(vad_path))
 audio_vad = importlib.util.module_from_spec(vad_spec)
 vad_spec.loader.exec_module(audio_vad)
-run_vad = audio_vad.run_vad
 
 def transcribe_audio_fastwhisper(audio_path, return_segments=True, language=None, whisper_model=None, config=None):
     """

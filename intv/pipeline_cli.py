@@ -117,7 +117,7 @@ Examples:
     )
     
     # Input options
-    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group = parser.add_mutually_exclusive_group(required=False)
     input_group.add_argument('--files', nargs='+', help='Input files to process')
     input_group.add_argument('--microphone', '-m', action='store_true', 
                            help='Record from microphone')
