@@ -198,6 +198,11 @@ async def docs_redirect(request: Request):
     # Optionally, could return OpenAPI docs here if desired
     return JSONResponse({"message": "Docs are available at /api (Swagger UI)."})
 
+def main():
+    """Entry point for intv-gui command."""
+    port = int(os.environ.get("PORT", 3773))
+    uvicorn.run("intv.gui.app:app", host="0.0.0.0", port=port, reload=False)
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 3773))
     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
