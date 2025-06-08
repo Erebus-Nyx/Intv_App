@@ -1,0 +1,19 @@
+auto_fill: true
+confidence_threshold: 0.7
+context:
+  content_type: report
+  description: Detailed description of what this module should accomplish
+  domain: child protective services
+  purpose: Modify this to describe your specific use case
+extraction_strategies:
+- smart_patterns
+- keyword_search
+- context_inference
+fallback_behavior: prompt_user
+module_id: snake_case_custom
+policy_structure:
+  one:
+    default: something
+    hint: Modify this hint to guide users
+    required: true
+    type: string

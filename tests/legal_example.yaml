@@ -1,0 +1,45 @@
+context:
+  content_type: case_document
+  description: Processes legal case files to extract parties, charges, evidence, and
+    outcomes
+  domain: legal
+  purpose: Analyze legal case documents to extract key case information and details
+module_id: legal_case
+policy_structure:
+  case_number:
+    default: ''
+    hint: Official case number or docket number
+    required: true
+    type: string
+  case_status:
+    default: ''
+    hint: Current status of the case
+    type: string
+  charges:
+    default: ''
+    hint: List of charges or claims
+    type: text
+  court:
+    default: ''
+    hint: Court name and jurisdiction
+    type: string
+  defendant:
+    default: ''
+    hint: Defendant name
+    type: string
+  incident_date:
+    default: ''
+    hint: Date of alleged incident
+    type: date
+  judge:
+    default: ''
+    hint: Presiding judge name
+    type: string
+  plaintiff:
+    default: ''
+    hint: Plaintiff or prosecutor name
+    type: string
+  summary:
+    default: ''
+    hint: Brief summary of the case
+    type: text

@@ -1,0 +1,26 @@
+MEDICAL INTAKE FORM
+
+Patient Information:
+Patient Name: Sarah Johnson
+Date of Birth: July 15, 1985
+Emergency Contact: Michael Johnson (spouse) - 555-987-6543
+
+Chief Complaint:
+Experiencing severe headaches for the past 2 weeks, accompanied by nausea and sensitivity to light.
+
+Medical History:
+- Migraines (diagnosed 2018)
+- High blood pressure (2020)
+- No surgeries
+
+Current Medications:
+- Atenolol 50mg daily for blood pressure
+- Sumatriptan as needed for migraines
+
+Allergies:
+- Penicillin (causes rash)
+- No food allergies
+
+Insurance Information:
+Provider: Aetna Health Plan
+Member ID: AET123456789

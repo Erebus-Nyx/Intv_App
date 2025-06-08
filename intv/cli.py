@@ -11,8 +11,15 @@ def get_parser():
         description="intv: Interview Automation & Document Analysis CLI",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    # General options
-    general = parser.add_argument_group('General Options')
+    
+    # Add subcommands
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Process command (default behavior)
+    process_parser = subparsers.add_parser('process', help='Process documents or audio (default)')
+    
+    # General options for process command
+    general = process_parser.add_argument_group('General Options')
     general.add_argument('-f', '--file', required=False, help='Path to the document file')
     general.add_argument('--audio', required=False, help='Path to the audio file for transcription')
     general.add_argument('-o', '--output', help='Output file path (optional)')
@@ -20,11 +27,40 @@ def get_parser():
     general.add_argument('--gui', action='store_true', default=False, help='Enable web-based GUI (if not set, defaults to terminal mode)')
     general.add_argument('--remotetunnel', action='store_true', default=False, help='Start a Cloudflare tunnel for remote access')
     general.add_argument('--shutdown', action='store_true', default=False, help='Shutdown all running intv services and exit')
-    general.add_argument('--version', action='store_true', default=False, help='Show version and exit')
-    general.add_argument('--about', action='store_true', default=False, help='Show about information and exit')
     general.add_argument('--mic', action='store_true', default=False, help='Use microphone for live/streaming transcription')
     general.add_argument('--module', required=False, help='Module/interview type to use (e.g., adult, ar, child, etc.). If set, bypasses interactive selection.')
-    # All other file locations (vars, policy, etc.) are set in config.yaml only
+    
+    # Module command (new universal module creator)
+    module_parser = subparsers.add_parser('module', help='Universal module creator and management')
+    module_subparsers = module_parser.add_subparsers(dest='module_command', help='Module management commands')
+    
+    # Module create subcommand
+    create_parser = module_subparsers.add_parser('create', help='Create a new universal module')
+    create_group = create_parser.add_mutually_exclusive_group(required=True)
+    create_group.add_argument('--config', '-c', help='Configuration file (YAML or JSON)')
+    create_group.add_argument('--interactive', '-i', action='store_true', help='Interactive module creation')
+    
+    # Module list subcommand
+    list_parser = module_subparsers.add_parser('list', help='List existing modules')
+    list_parser.add_argument('--detailed', '-d', action='store_true', help='Show detailed information')
+    
+    # Module example subcommand
+    example_parser = module_subparsers.add_parser('example', help='Generate example configurations')
+    example_parser.add_argument('--domain', choices=['legal', 'medical', 'business'], 
+                              help='Domain for example configuration')
+    example_parser.add_argument('--output', '-o', help='Output file for example configuration')
+    example_parser.add_argument('--list-examples', action='store_true', help='List available examples')
+    
+    # Module test subcommand
+    test_parser = module_subparsers.add_parser('test', help='Test a created module')
+    test_parser.add_argument('--module', '-m', required=True, help='Module ID to test')
+    test_parser.add_argument('--content', '-c', help='Test content (text)')
+    test_parser.add_argument('--file', '-f', help='Test content from file')
+    
+    # Global options
+    parser.add_argument('--version', action='store_true', default=False, help='Show version and exit')
+    parser.add_argument('--about', action='store_true', default=False, help='Show about information and exit')
+    
     return parser
 
 # Helper to load config from settings.json
@@ -39,7 +75,11 @@ def load_settings(config_path=None):
 def parse_cli_args():
     parser = get_parser()
     # Fast path: print help/version/about before any config loading or import
-    if len(sys.argv) == 1 or any(arg in sys.argv for arg in ["-h", "--help"]):
+    # But only for global help, not subcommand help
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+    if len(sys.argv) == 2 and sys.argv[1] in ["-h", "--help"]:
         parser.print_help()
         sys.exit(0)
     if "--version" in sys.argv:
@@ -52,76 +92,86 @@ def parse_cli_args():
     
     args = parser.parse_args()
     
-    # Handle shutdown flag early
-    if args.shutdown:
+    # Handle shutdown flag early (only exists for process command)
+    if hasattr(args, 'shutdown') and args.shutdown:
         from .server_utils import shutdown_services
         print("[INFO] Shutting down all intv services...")
         shutdown_services()
         print("[INFO] Shutdown complete.")
         sys.exit(0)
     # Load config values from settings.json (or config.yaml via settings.json)
-    settings = load_settings(getattr(args, 'config', None))
-    # Set config-driven options (no CLI override for file locations)
-    args.log_level = settings.get('log_level', 'INFO')
-    args.llm_provider = settings.get('llm_provider', 'llama.cpp')
-    args.llm_api_base = settings.get('llm_api_base', None)
-    args.llm_api_key = settings.get('llm_api_key', None)
-    args.llm_api_port = settings.get('llm_api_port', None)
-    args.chunk_size = settings.get('chunk_size', 1200)
-    args.output_format = settings.get('output_format', 'txt')  # Accepts: txt, json, srt, vtt. Used for both transcription and results.
-    args.rag_mode = settings.get('rag_mode', 'embedded')
-    args.llm_mode = settings.get('llm_mode', 'embedded')
-    args.llm_provider = settings.get('llm_provider', '')
+    # Only load settings if we're in process mode or have config attribute
+    if hasattr(args, 'config') or (hasattr(args, 'command') and args.command == 'process'):
+        settings = load_settings(getattr(args, 'config', None))
+        # Set config-driven options (no CLI override for file locations)
+        args.log_level = settings.get('log_level', 'INFO')
+        args.llm_provider = settings.get('llm_provider', 'llama.cpp')
+        args.llm_api_base = settings.get('llm_api_base', None)
+        args.llm_api_key = settings.get('llm_api_key', None)
+        args.llm_api_port = settings.get('llm_api_port', None)
+        args.chunk_size = settings.get('chunk_size', 1200)
+        args.output_format = settings.get('output_format', 'txt')  # Accepts: txt, json, srt, vtt. Used for both transcription and results.
+        args.rag_mode = settings.get('rag_mode', 'embedded')
+        args.llm_mode = settings.get('llm_mode', 'embedded')
+        args.llm_provider = settings.get('llm_provider', '')
 
-    # Inject config-driven defaults for all new settings
-    args.whisper_model = settings.get('whisper_model', 'base')
-    args.enable_vad = settings.get('enable_vad', True)
-    args.enable_diarization = settings.get('enable_diarization', True)
-    args.audio_sample_rate = settings.get('audio_sample_rate', 16000)
-    args.vad_min_segment_ms = settings.get('vad_min_segment_ms', 500)
-    args.vad_aggressiveness = settings.get('vad_aggressiveness', 2)
-    args.diarization_model = settings.get('diarization_model', '')
-    args.llm_mode = settings.get('llm_mode', 'embedded')
-    args.llm_model = settings.get('llm_model', '')
-    args.llm_temperature = settings.get('llm_temperature', 0.7)
-    args.llm_context_size = settings.get('llm_context_size', 'auto')
-    args.llm_max_tokens = settings.get('llm_max_tokens', 1024)
-    args.llm_top_p = settings.get('llm_top_p', 1.0)
-    args.llm_frequency_penalty = settings.get('llm_frequency_penalty', 0.0)
-    args.llm_presence_penalty = settings.get('llm_presence_penalty', 0.0)
-    args.llm_stop = settings.get('llm_stop', '')
-    args.rag_model = settings.get('rag_model', '')
-    args.rag_chunk_size = settings.get('rag_chunk_size', 500)
-    args.rag_top_k = settings.get('rag_top_k', 5)
-    args.rag_score_threshold = settings.get('rag_score_threshold', 0.0)
-    args.rag_prompt_template = settings.get('rag_prompt_template', '')
-    args.rag_context_window = settings.get('rag_context_window', 2048)
+        # Inject config-driven defaults for all new settings
+        args.whisper_model = settings.get('whisper_model', 'base')
+        args.enable_vad = settings.get('enable_vad', True)
+        args.enable_diarization = settings.get('enable_diarization', True)
+        args.audio_sample_rate = settings.get('audio_sample_rate', 16000)
+        args.vad_min_segment_ms = settings.get('vad_min_segment_ms', 500)
+        args.vad_aggressiveness = settings.get('vad_aggressiveness', 2)
+        args.diarization_model = settings.get('diarization_model', '')
+        args.llm_mode = settings.get('llm_mode', 'embedded')
+        args.llm_model = settings.get('llm_model', '')
+        args.llm_temperature = settings.get('llm_temperature', 0.7)
+        args.llm_context_size = settings.get('llm_context_size', 'auto')
+        args.llm_max_tokens = settings.get('llm_max_tokens', 1024)
+        args.llm_top_p = settings.get('llm_top_p', 1.0)
+        args.llm_frequency_penalty = settings.get('llm_frequency_penalty', 0.0)
+        args.llm_presence_penalty = settings.get('llm_presence_penalty', 0.0)
+        args.llm_stop = settings.get('llm_stop', '')
+        args.rag_model = settings.get('rag_model', '')
+        args.rag_chunk_size = settings.get('rag_chunk_size', 500)
+        args.rag_top_k = settings.get('rag_top_k', 5)
+        args.rag_score_threshold = settings.get('rag_score_threshold', 0.0)
+        args.rag_prompt_template = settings.get('rag_prompt_template', '')
+        args.rag_context_window = settings.get('rag_context_window', 2048)
 
-    # Failsafe: If llm_mode is 'external', check for required external LLM config
-    if args.llm_mode == 'external':
-        missing = []
-        if not settings.get('llm_provider'):
-            missing.append('llm_provider')
-        if not settings.get('llm_api_base'):
-            missing.append('llm_api_base')
-        if settings.get('llm_api_key', None) is None:
-            missing.append('llm_api_key')
-        if settings.get('llm_api_port', None) is None:
-            missing.append('llm_api_port')
-        if missing:
-            print(f"[ERROR] llm_mode is 'external' but the following required config values are missing or commented out in config.yaml: {', '.join(missing)}")
-            print("Please edit config/config.yaml and ensure all required fields are set for external LLM usage.")
-            sys.exit(1)
+        # Failsafe: If llm_mode is 'external', check for required external LLM config
+        if args.llm_mode == 'external':
+            missing = []
+            if not settings.get('llm_provider'):
+                missing.append('llm_provider')
+            if not settings.get('llm_api_base'):
+                missing.append('llm_api_base')
+            if settings.get('llm_api_key', None) is None:
+                missing.append('llm_api_key')
+            if settings.get('llm_api_port', None) is None:
+                missing.append('llm_api_port')
+            if missing:
+                print(f"[ERROR] llm_mode is 'external' but the following required config values are missing or commented out in config.yaml: {', '.join(missing)}")
+                print("Please edit config/config.yaml and ensure all required fields are set for external LLM usage.")
+                sys.exit(1)
 
-    # If using koboldcpp as an external LLM provider, ignore any model specified in config or CLI
-    if args.llm_mode == 'external' and args.llm_provider.lower() == 'koboldcpp' and hasattr(args, 'llm_model'):
-        args.llm_model = None  # KoboldCpp will use whatever model is loaded in its app
+        # If using koboldcpp as an external LLM provider, ignore any model specified in config or CLI
+        if args.llm_mode == 'external' and args.llm_provider.lower() == 'koboldcpp' and hasattr(args, 'llm_model'):
+            args.llm_model = None  # KoboldCpp will use whatever model is loaded in its app
+    else:
+        # For module commands, we don't need all the LLM settings
+        settings = {}
 
     # Skip interactive prompt for tunnel-only operations
     tunnel_only_operation = getattr(args, 'remotetunnel', False) and not getattr(args, 'file', None) and not getattr(args, 'audio', None)
     
+    # Only run interactive prompt for process command (not module command)
+    is_process_command = not hasattr(args, 'command') or args.command is None or args.command == 'process'
+    
     # Only run interactive prompt if not help/version/about/tunnel-only and if type is missing
-    if not tunnel_only_operation and (not hasattr(args, 'type') or not args.type) and (not hasattr(args, 'module') or not args.module):
+    if (is_process_command and not tunnel_only_operation and 
+        (not hasattr(args, 'type') or not args.type) and 
+        (not hasattr(args, 'module') or not args.module)):
         try:
             from pathlib import Path
             sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -157,6 +207,52 @@ def parse_cli_args():
 
 def main():
     args = parse_cli_args()
+    
+    # Handle module command (new universal module creator)
+    if hasattr(args, 'command') and args.command == 'module':
+        from .modules.universal_module_cli import UniversalModuleCLI
+        cli = UniversalModuleCLI()
+        
+        # Build arguments for the module CLI
+        module_args = []
+        if hasattr(args, 'module_command') and args.module_command:
+            module_args.append(args.module_command)
+            
+            # Add specific arguments based on the subcommand
+            if args.module_command == 'create':
+                if getattr(args, 'interactive', False):
+                    module_args.extend(['--interactive'])
+                elif getattr(args, 'config', None):
+                    module_args.extend(['--config', args.config])
+            elif args.module_command == 'list':
+                if getattr(args, 'detailed', False):
+                    module_args.extend(['--detailed'])
+            elif args.module_command == 'example':
+                if getattr(args, 'domain', None):
+                    module_args.extend(['--domain', args.domain])
+                if getattr(args, 'output', None):
+                    module_args.extend(['--output', args.output])
+                if getattr(args, 'list_examples', False):
+                    module_args.extend(['--list-examples'])
+            elif args.module_command == 'test':
+                if getattr(args, 'module', None):
+                    module_args.extend(['--module', args.module])
+                if getattr(args, 'content', None):
+                    module_args.extend(['--content', args.content])
+                if getattr(args, 'file', None):
+                    module_args.extend(['--file', args.file])
+        
+        # Run the module CLI
+        result = cli.run(module_args)
+        if isinstance(result, dict) and not result.get("success"):
+            import sys
+            sys.exit(1)
+        return
+    
+    # If no command specified, default to 'process' behavior
+    if not hasattr(args, 'command') or args.command is None:
+        args.command = 'process'
+    
     try:
         from .output_and_cache import ensure_output_dir, purge_cache
     except ImportError:
@@ -179,8 +275,8 @@ def main():
     retention_days = int(settings.get('cache_retention_days', 7))
     ensure_output_dir(output_dir)
 
-    # Handle remote tunnel flag
-    if args.remotetunnel:
+    # Handle remote tunnel flag (only for process command)
+    if hasattr(args, 'remotetunnel') and args.remotetunnel:
         from .server_utils import ensure_cloudflared_running, is_port_in_use, get_cloudflared_binary
         import subprocess
         import os
@@ -325,8 +421,7 @@ def main():
             api_key=args.llm_api_key,
             api_port=args.llm_api_port,
             provider=args.llm_provider,
-            output_path=None,  # Will trigger save-as dialog if not set
-            config=settings
+            output_path=None  # Will trigger save-as dialog if not set
         )
         # Parse output blocks
         block1 = pipeline_output.get('block1', {})

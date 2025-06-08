@@ -1,0 +1,40 @@
+module_id: medical_intake
+context:
+  purpose: Extract patient information and medical history from intake forms
+  domain: medical
+  content_type: form
+  description: Processes medical intake forms to extract patient demographics, medical history, and current symptoms
+
+policy_structure:
+  patient_name:
+    type: string
+    hint: Full name of the patient
+    required: true
+  date_of_birth:
+    type: date
+    hint: Patient's date of birth
+    required: true
+  chief_complaint:
+    type: text
+    hint: Primary reason for visit or main symptom
+    required: true
+  medical_history:
+    type: text
+    hint: Past medical conditions, surgeries, medications
+    default: "None reported"
+  allergies:
+    type: text
+    hint: Known allergies or adverse reactions
+    default: "No known allergies"
+  current_medications:
+    type: text
+    hint: Current medications and dosages
+    default: "None"
+  emergency_contact:
+    type: string
+    hint: Name and phone number of emergency contact
+    required: true
+  insurance_info:
+    type: string
+    hint: Insurance provider and member ID
+    default: ""

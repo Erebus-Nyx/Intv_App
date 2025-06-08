@@ -196,6 +196,41 @@ class DependencyManager:
                 return True
         return False
     
+    def _get_system_info(self) -> Dict:
+        """Get system information for hardware-specific recommendations."""
+        system_info = {
+            'platform': platform.system().lower(),
+            'gpu': {
+                'has_cuda': False,
+                'has_rocm': False,
+                'has_mps': False
+            }
+        }
+        
+        # Check for CUDA
+        try:
+            import subprocess
+            result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
+            system_info['gpu']['has_cuda'] = result.returncode == 0
+        except:
+            pass
+        
+        # Check for ROCm
+        try:
+            import subprocess
+            result = subprocess.run(['rocm-smi'], capture_output=True, timeout=5)
+            system_info['gpu']['has_rocm'] = result.returncode == 0
+        except:
+            pass
+        
+        # Check for Apple Silicon (MPS)
+        if system_info['platform'] == 'darwin':
+            machine = platform.machine().lower()
+            if 'arm64' in machine or 'aarch64' in machine:
+                system_info['gpu']['has_mps'] = True
+        
+        return system_info
+    
     def print_status(self):
         """Print current dependency status."""
         print(self.get_installation_guide(missing_only=False))

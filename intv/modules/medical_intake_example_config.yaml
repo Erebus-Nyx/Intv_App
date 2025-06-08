@@ -1,0 +1,54 @@
+auto_fill: true
+confidence_threshold: 0.7
+context:
+  content_type: form
+  description: Detailed description of what this module should accomplish
+  domain: medical
+  purpose: Modify this to describe your specific use case
+extraction_strategies:
+- smart_patterns
+- keyword_search
+- context_inference
+fallback_behavior: prompt_user
+module_id: medical_intake_custom
+policy_structure:
+  allergies:
+    default: No known allergies
+    hint: Modify this hint to guide users
+    required: false
+    type: text
+  chief_complaint:
+    default: ''
+    hint: Modify this hint to guide users
+    required: true
+    type: text
+  current_medications:
+    default: None
+    hint: Modify this hint to guide users
+    required: false
+    type: text
+  date_of_birth:
+    default: ''
+    hint: Modify this hint to guide users
+    required: true
+    type: date
+  emergency_contact:
+    default: ''
+    hint: Modify this hint to guide users
+    required: true
+    type: string
+  insurance_info:
+    default: ''
+    hint: Modify this hint to guide users
+    required: false
+    type: string
+  medical_history:
+    default: None reported
+    hint: Modify this hint to guide users
+    required: false
+    type: text
+  patient_name:
+    default: ''
+    hint: Modify this hint to guide users
+    required: true
+    type: string
