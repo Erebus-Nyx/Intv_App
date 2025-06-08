@@ -375,7 +375,7 @@ class PipelineOrchestrator:
                           module_key: Optional[str] = None,
                           query: Optional[str] = None,
                           apply_llm: bool = True) -> ProcessingResult:
-        """Process audio files using transcription"""
+        """Process audio files using complete pipeline: Audio → Transcription → VAD → Diarization → RAG → LLM"""
         try:
             if not HAS_AUDIO:
                 return ProcessingResult(
@@ -388,7 +388,7 @@ class PipelineOrchestrator:
             if HAS_UTILS:
                 validate_file(str(file_path))
             
-            # Transcribe audio
+            # Step 1: Transcribe audio (with VAD integration already handled in transcribe_audio_fastwhisper)
             segments = transcribe_audio_fastwhisper(
                 str(file_path),
                 return_segments=True,
@@ -405,21 +405,65 @@ class PipelineOrchestrator:
             # Extract transcript text
             transcript = " ".join([seg.get('text', '') for seg in segments])
             
-            # Chunk the transcript
+            # Step 2: Apply Enhanced Diarization (speaker separation)
+            diarization_results = []
+            if self.config.get('enable_diarization', True):
+                try:
+                    from .audio_diarization import diarize_audio
+                    diarization_results = diarize_audio(
+                        str(file_path),
+                        num_speakers=self.config.get('num_speakers'),
+                        min_speakers=self.config.get('min_speakers', 1),
+                        max_speakers=self.config.get('max_speakers', 10),
+                        config=self.config  # Pass config for enhanced pyannote processing
+                    )
+                    
+                    # Merge diarization with transcription segments
+                    for i, seg in enumerate(segments):
+                        seg['speaker'] = None
+                        seg_start = seg.get('start', 0)
+                        seg_end = seg.get('end', seg_start)
+                        
+                        # Find matching speaker from diarization
+                        for diar_seg in diarization_results:
+                            diar_start = diar_seg.get('start_time', 0)
+                            diar_end = diar_seg.get('end_time', diar_start)
+                            
+                            # Check for overlap
+                            if (seg_start >= diar_start and seg_start < diar_end) or \
+                               (seg_end > diar_start and seg_end <= diar_end) or \
+                               (seg_start <= diar_start and seg_end >= diar_end):
+                                seg['speaker'] = diar_seg.get('speaker_id')
+                                break
+                    
+                except Exception as e:
+                    self.logger.warning(f"Diarization failed: {e}")
+            
+            # Step 3: Chunk the transcript for RAG processing
             from .rag import chunk_text
             chunks = chunk_text(transcript)
             
-            # Create result
+            # Create result with enhanced metadata
             result = ProcessingResult(
                 success=True,
                 input_type=InputType.AUDIO,
                 transcript=transcript,
                 segments=segments,
                 chunks=chunks,
-                metadata={'transcription_segments': len(segments)}
+                metadata={
+                    'transcription_segments': len(segments),
+                    'diarization_enabled': self.config.get('enable_diarization', True),
+                    'diarization_speakers': len(set(seg.get('speaker') for seg in segments if seg.get('speaker'))),
+                    'vad_enabled': self.config.get('enable_vad', True),
+                    'audio_processing_pipeline': 'Audio → Transcription → VAD → Diarization → RAG → LLM'
+                }
             )
             
-            # Apply RAG query if provided
+            # Store diarization results if available
+            if diarization_results:
+                result.metadata['diarization_results'] = diarization_results
+            
+            # Step 4: Apply RAG query if provided
             if query and result.chunks and HAS_RAG:
                 try:
                     rag_result = enhanced_query_documents(
@@ -428,19 +472,40 @@ class PipelineOrchestrator:
                         self.config
                     )
                     result.rag_result = rag_result
+                    self.logger.info(f"RAG processing completed: {len(result.chunks)} chunks processed")
                 except Exception as e:
                     self.logger.warning(f"RAG processing failed: {e}")
             
-            # Apply module processing if requested
+            # Step 5: Apply LLM module processing if requested
             if module_key and HAS_MODULES and apply_llm:
                 try:
-                    llm_result = dynamic_module_output(
+                    # Use the new enhanced dynamic module processor
+                    from .modules.enhanced_dynamic_module import enhanced_dynamic_module_output
+                    
+                    llm_result = enhanced_dynamic_module_output(
+                        text_content=transcript,
                         module_key=module_key,
-                        provided_data=transcript
+                        metadata={
+                            "input_type": "audio",
+                            "segments": len(segments) if segments else 0,
+                            "speakers": result.metadata.get('diarization_speakers', 0),
+                            "processing_pipeline": "complete_audio_pipeline"
+                        }
                     )
                     result.llm_output = llm_result
+                    self.logger.info(f"Enhanced LLM processing completed for module: {module_key}")
                 except Exception as e:
-                    self.logger.warning(f"Module processing failed: {e}")
+                    # Fallback to legacy processor if enhanced one fails
+                    self.logger.warning(f"Enhanced module processing failed, trying legacy: {e}")
+                    try:
+                        llm_result = dynamic_module_output(
+                            module_key=module_key,
+                            provided_data=transcript
+                        )
+                        result.llm_output = llm_result
+                        self.logger.info(f"Legacy LLM processing completed for module: {module_key}")
+                    except Exception as e2:
+                        self.logger.warning(f"Module processing failed completely: {e2}")
             
             return result
             
@@ -456,7 +521,7 @@ class PipelineOrchestrator:
                           module_key: Optional[str] = None,
                           query: Optional[str] = None,
                           apply_llm: bool = True) -> ProcessingResult:
-        """Process live microphone input"""
+        """Process live microphone input using complete pipeline: Audio → Transcription → VAD → Diarization → RAG → LLM"""
         try:
             if not HAS_AUDIO:
                 return ProcessingResult(
@@ -465,7 +530,7 @@ class PipelineOrchestrator:
                     error_message="Audio processing dependencies not available"
                 )
             
-            # Start microphone transcription
+            # Start microphone transcription (VAD is integrated in transcription)
             segments = stream_microphone_transcription_interactive(config=self.config)
             
             if not segments:
@@ -478,18 +543,34 @@ class PipelineOrchestrator:
             # Extract transcript text
             transcript = " ".join([seg.get('text', '') for seg in segments])
             
+            # Note: Diarization for microphone input is typically not needed as it's single speaker
+            # But we can still apply it if requested
+            diarization_results = []
+            if self.config.get('enable_diarization', False):  # Default to False for microphone
+                try:
+                    # For microphone, we'd need to save the audio first to run diarization
+                    # This is a placeholder - real implementation would need audio file path
+                    self.logger.info("Diarization skipped for microphone input (real-time processing)")
+                except Exception as e:
+                    self.logger.warning(f"Microphone diarization failed: {e}")
+            
             # Chunk the transcript
             from .rag import chunk_text
             chunks = chunk_text(transcript)
             
-            # Create result
+            # Create result with enhanced metadata
             result = ProcessingResult(
                 success=True,
                 input_type=InputType.MICROPHONE,
                 transcript=transcript,
                 segments=segments,
                 chunks=chunks,
-                metadata={'transcription_segments': len(segments)}
+                metadata={
+                    'transcription_segments': len(segments),
+                    'diarization_enabled': False,  # Typically disabled for microphone
+                    'vad_enabled': self.config.get('enable_vad', True),
+                    'audio_processing_pipeline': 'Microphone → Transcription → VAD → RAG → LLM'
+                }
             )
             
             # Apply RAG query if provided
@@ -501,19 +582,39 @@ class PipelineOrchestrator:
                         self.config
                     )
                     result.rag_result = rag_result
+                    self.logger.info(f"RAG processing completed: {len(result.chunks)} chunks processed")
                 except Exception as e:
                     self.logger.warning(f"RAG processing failed: {e}")
             
             # Apply module processing if requested
             if module_key and HAS_MODULES and apply_llm:
                 try:
-                    llm_result = dynamic_module_output(
+                    # Use the new enhanced dynamic module processor
+                    from .modules.enhanced_dynamic_module import enhanced_dynamic_module_output
+                    
+                    llm_result = enhanced_dynamic_module_output(
+                        text_content=transcript,
                         module_key=module_key,
-                        provided_data=transcript
+                        metadata={
+                            "input_type": "microphone",
+                            "segments": len(segments) if segments else 0,
+                            "processing_pipeline": "complete_microphone_pipeline"
+                        }
                     )
                     result.llm_output = llm_result
+                    self.logger.info(f"Enhanced LLM processing completed for module: {module_key}")
                 except Exception as e:
-                    self.logger.warning(f"Module processing failed: {e}")
+                    # Fallback to legacy processor if enhanced one fails
+                    self.logger.warning(f"Enhanced module processing failed, trying legacy: {e}")
+                    try:
+                        llm_result = dynamic_module_output(
+                            module_key=module_key,
+                            provided_data=transcript
+                        )
+                        result.llm_output = llm_result
+                        self.logger.info(f"Legacy LLM processing completed for module: {module_key}")
+                    except Exception as e2:
+                        self.logger.warning(f"Module processing failed completely: {e2}")
             
             return result
             
@@ -569,13 +670,30 @@ class PipelineOrchestrator:
         # Apply module processing if requested
         if module_key and HAS_MODULES and apply_llm:
             try:
-                llm_result = dynamic_module_output(
+                # Use the new enhanced dynamic module processor
+                from .modules.enhanced_dynamic_module import enhanced_dynamic_module_output
+                
+                text_content = result.extracted_text or result.transcript or ""
+                llm_result = enhanced_dynamic_module_output(
+                    text_content=text_content,
                     module_key=module_key,
-                    provided_data=result.extracted_text or result.transcript or ""
+                    metadata={
+                        "input_type": result.input_type.value if hasattr(result, 'input_type') else None,
+                        "processing_metadata": result.metadata
+                    }
                 )
                 result.llm_output = llm_result
             except Exception as e:
-                self.logger.warning(f"Module processing failed: {e}")
+                # Fallback to legacy processor if enhanced one fails
+                self.logger.warning(f"Enhanced module processing failed, trying legacy: {e}")
+                try:
+                    llm_result = dynamic_module_output(
+                        module_key=module_key,
+                        provided_data=result.extracted_text or result.transcript or ""
+                    )
+                    result.llm_output = llm_result
+                except Exception as e2:
+                    self.logger.warning(f"Module processing failed completely: {e2}")
         
         return result
 

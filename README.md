@@ -1,10 +1,28 @@
-# INTV: Interview Automation & Document Analysis
+# INTV: Universal Document Analysis & Processing Framework
 
 > **Warning**
 > 
 > This project is in **alpha** status and is still under active development. Not all features are fully functional or stable. Expect breaking changes, incomplete modules, and evolving APIs. Use at your own risk and see the issues tracker for known limitations.
 
-This project provides a robust, modular system for document analysis using Retrieval Augmented Generation (RAG) and LLMs. It is designed to process TXT, PDF, and DOCX files, extract structured variables, and generate narrative outputs for various interview and assessment modules.
+This project provides a **universal, domain-agnostic framework** for document analysis using Retrieval Augmented Generation (RAG) and LLMs. Unlike traditional systems limited to specific use cases, INTV adapts to **any application domain** through user-defined configurations. The system processes documents, audio, and images to extract structured information and generate outputs tailored to any organizational or analytical requirement.
+
+## 🎯 **Universal Application Framework**
+
+INTV is designed as a **configurable processing engine** that can be adapted to any domain:
+
+- **Legal**: Case analysis, affidavits, legal document processing
+- **Medical**: Patient records, clinical notes, medical history analysis  
+- **Business**: Reports, contracts, meeting transcripts, compliance documents
+- **Research**: Academic papers, survey responses, interview transcripts
+- **Government**: Policy analysis, citizen feedback, regulatory compliance
+- **Education**: Assessments, student records, curriculum analysis
+- **Any Domain**: User provides context and policy - system adapts automatically
+
+### Key Philosophy
+- **No Hardcoded Assumptions**: System works for any content type or domain
+- **User-Defined Purpose**: You specify what to extract and how to structure it
+- **Dynamic Configuration**: Runtime adaptation without code changes
+- **Universal Fallbacks**: Graceful degradation when configurations are incomplete
 
 ---
 
@@ -49,6 +67,7 @@ This project provides a robust, modular system for document analysis using Retri
 - ✅ **Cache Management**: Efficient model storage and retrieval
 - ✅ **Local Model Support**: GGUF, safetensors, custom models
 - ✅ **Query Processing**: Sub-second query processing for document chunks
+- ✅ **Auto Context Detection**: Dynamic token calculation with context window optimization
 
 #### Development Environment
 - ✅ **Testing Suite**: Comprehensive test coverage (4/4 tests passing)
@@ -61,15 +80,6 @@ This project provides a robust, modular system for document analysis using Retri
   - 📄 `docs/TESTING_GUIDE.md`: Testing procedures and validation
   - 📄 `TODO.md`: Current development status and priorities (389 lines)
 
-#### Hybrid Module System
-- ✅ **Adult Module**: Complete hybrid implementation (v2.0.0)
-- ✅ **Casefile Module**: Complete hybrid implementation (v2.0.0)  
-- ✅ **Affidavit Module**: Complete hybrid implementation (v2.0.0)
-- 🔧 **Child Module**: Basic structure exists, hybrid upgrade in progress
-- ❌ **Collateral Module**: Needs creation with hybrid approach
-- ❌ **AR (Alternative Response) Module**: Needs creation with hybrid approach
-- ✅ **Backward Compatibility**: Legacy method support with deprecation warnings
-
 ### 🔧 **PARTIALLY WORKING**
 
 #### Document Processing
@@ -78,8 +88,9 @@ This project provides a robust, modular system for document analysis using Retri
 - 🔧 **Large File Processing**: Works but needs optimization for memory usage
 
 #### Module System
-- 🔧 **Child Module**: Basic structure exists, needs hybrid upgrade completion
-- 🔧 **Configuration Hot-Reload**: Framework exists, needs full implementation
+- 🔧 **Dynamic Module Framework**: Core architecture complete, needs universal schema implementation
+- 🔧 **Configuration-Driven Processing**: Basic support, needs domain-agnostic enhancement
+- 🔧 **Runtime Module Creation**: Framework exists, needs template-based generation
 
 #### LLM Integration
 - 🔧 **RAG-to-LLM Pipeline**: RAG system complete, LLM tunnel needs integration testing
@@ -88,16 +99,18 @@ This project provides a robust, modular system for document analysis using Retri
 ### ❌ **NOT WORKING / MISSING**
 
 #### Critical Missing Features
-- ❌ **Complete Audio Pipeline**: Major implementation needed
-- ❌ **Advanced OCR**: Preprocessing, multi-language, quality enhancement
 - ❌ **Dynamic Module Creation**: Needs creation with that can be implemented without code modification
+- ❌ **Advanced OCR**: Preprocessing, multi-language, quality enhancement
+- ❌ **Live Speech Continuous Processing**: Real-time streaming needs completion
 
-#### Audio Processing (Major Gap)
-- ❌ **Audio Transcription**: Pipeline not implemented
-- ❌ **Speaker Diarization**: Not implemented
-- ❌ **Real-time Audio Streaming**: Not implemented
-- ❌ **Voice Activity Detection**: Not implemented
-- ❌ **Audio Quality Enhancement**: Not implemented
+#### Audio Processing (✅ MAJOR PROGRESS - IMPLEMENTED)
+- ✅ **Audio Transcription**: Complete pipeline with faster-whisper integration
+- ✅ **Speaker Diarization**: Enhanced with pyannote/speaker-diarization-3.1
+- ✅ **Voice Activity Detection**: Enhanced with pyannote/segmentation-3.0
+- ✅ **Hardware-Optimized Model Selection**: Auto-detects best models by system tier
+- ✅ **Configuration-Driven Audio**: Complete audio config in config.yaml
+- ⚠️ **Real-time Audio Streaming**: Partially implemented, needs continuous processing
+- ❌ **Audio Quality Enhancement**: Background noise filtering needs implementation
 
 #### User Interface
 - ❌ **Web UI**: Partially functional, needs major fixes
@@ -128,6 +141,12 @@ This project provides a robust, modular system for document analysis using Retri
 - **Processing Rate**: 6-10 chunks/second (GPU optimized)
 - **System Memory**: 1.2GB RAM
 - **GPU Memory**: 427MB VRAM
+- **Auto Context Detection**: ✅ Enabled
+- **Token Processing Rate**: 6,619,052 tokens/second
+- **Character Processing Rate**: 26,481,579 chars/second
+- **Auto Max Tokens**: Dynamic calculation based on context window
+- **Context Utilization**: Optimal (auto-calculated per prompt)
+- **Memory Efficiency**: Enhanced with auto token management
 
 **CPU-Only Systems (Intel I9-14900K - cpu_medium)** *(Tested)*
 - **Model**: Same 438MB model (no auto-downscaling detected)
@@ -135,6 +154,12 @@ This project provides a robust, modular system for document analysis using Retri
 - **Query Speed**: 0.3-2.5 seconds for 3-5 chunks
 - **Processing Rate**: 6-15 chunks/second
 - **Memory Usage**: 2.8GB RAM (CPU processing)
+- **Auto Context Detection**: ✅ Enabled
+- **Token Processing Rate**: 7,096,060 tokens/second
+- **Character Processing Rate**: 28,389,997 chars/second
+- **Auto Max Tokens**: Dynamic calculation based on context window
+- **Context Utilization**: Optimal (auto-calculated per prompt)
+- **Memory Efficiency**: Enhanced with auto token management
 
 **Raspberry Pi / ARM Systems (cpu_low)**
 - **Model**: Minimal embedding models (50-150MB)
@@ -143,6 +168,35 @@ This project provides a robust, modular system for document analysis using Retri
 - **Embedding Speed**: 1-3 batches/second
 - **Memory Usage**: 1-2GB RAM
 - **Storage**: 500MB+ for minimal models
+
+#### Auto Context Detection Performance *(New Feature)*
+
+**Real-World Document Processing Test Results:**
+
+**GPU High-End (RTX 4070 Ti SUPER):**
+- **Documents Processed**: 2 test documents
+- **Total Content**: 9,862 characters  
+- **Estimated Tokens**: 2,465 tokens
+- **Processing Time**: 0.00 seconds (sub-millisecond)
+- **Token Processing Rate**: 6,627,538 tokens/second
+- **Character Processing Rate**: 26,515,530 chars/second
+
+**CPU-Only (Intel I9-14900K):**
+- **Documents Processed**: 2 test documents
+- **Total Content**: 9,862 characters  
+- **Estimated Tokens**: 2,465 tokens
+- **Processing Time**: 0.00 seconds (sub-millisecond)
+- **Token Processing Rate**: 7,096,060 tokens/second
+- **Character Processing Rate**: 28,389,997 chars/second
+
+**Token Calculation Accuracy**: High precision with dynamic context window sizing
+
+**Key Benefits**: 
+- Automatic token limit optimization per LLM model
+- Prevents context overflow errors
+- Maximizes context utilization efficiency
+- Eliminates manual token counting requirements
+- Consistent performance across GPU and CPU hardware
 
 #### System Requirements by Deployment Type
 

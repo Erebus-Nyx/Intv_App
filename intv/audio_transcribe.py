@@ -17,6 +17,13 @@ try:
 except ImportError:
     HAS_SOUNDDEVICE = False
 
+# Import audio system capabilities for hardware-optimized model selection
+try:
+    from .audio_system import AudioSystemCapabilities, get_audio_model_recommendations
+    HAS_AUDIO_SYSTEM = True
+except ImportError:
+    HAS_AUDIO_SYSTEM = False
+
 def download_model_if_needed(model_size: str, models_dir: str = "models") -> str:
     """
     Ensure the Whisper model is present in the models directory. Download if missing.
@@ -140,6 +147,20 @@ except ImportError:
 
 def get_transcribe_pipe(model_id=None, config=None):
     """Return a transcription pipeline for the given model_id, using faster-whisper if requested, else transformers."""
+    
+    # Auto-select model based on hardware if not specified
+    if model_id is None or model_id == "auto":
+        if HAS_AUDIO_SYSTEM:
+            try:
+                recommendations = get_audio_model_recommendations(config)
+                model_id = recommendations.get('whisper_model', 'faster-whisper/base')
+                logging.info(f"Auto-selected Whisper model: {model_id}")
+            except Exception as e:
+                logging.warning(f"Failed to auto-select model: {e}")
+                model_id = 'faster-whisper/base'
+        else:
+            model_id = 'faster-whisper/base'
+    
     if model_id and model_id.startswith("faster-whisper/"):
         if not HAS_FASTER_WHISPER:
             raise ImportError("faster-whisper is not installed. Please run 'pip install faster-whisper'.")
@@ -177,13 +198,41 @@ def transcribe_audio_fastwhisper(audio_path, return_segments=True, language=None
     import soundfile as sf
     import numpy as np
     audio, sr = sf.read(audio_path)
-    # --- VAD: restrict transcription to speech segments only ---
+    # --- Enhanced VAD: restrict transcription to speech segments only ---
     vad_segments = None
     if config is not None and config.get('enable_vad', True):
-        vad_segments = run_vad(audio, sr, config)
-        if vad_segments and len(vad_segments) > 0:
-            # Only keep speech regions
-            audio = np.concatenate([audio[start:end] for start, end in vad_segments])
+        try:
+            # Try enhanced VAD first (pyannote-based)
+            if hasattr(audio_vad, 'detect_voice_activity_pyannote'):
+                vad_segments = audio_vad.detect_voice_activity_pyannote(audio_path, config)
+                logging.info(f"Enhanced VAD detected {len(vad_segments)} speech segments")
+            else:
+                # Fallback to basic VAD
+                vad_segments = audio_vad.detect_voice_activity(audio, sr)
+                logging.info(f"Basic VAD detected {len(vad_segments)} speech segments")
+            
+            if vad_segments and len(vad_segments) > 0:
+                # Apply VAD filtering to audio using enhanced method if available
+                if hasattr(audio_vad, 'apply_vad_filter_enhanced'):
+                    audio = audio_vad.apply_vad_filter_enhanced(audio, sr, vad_segments)
+                else:
+                    # Convert time segments to sample indices and extract speech regions
+                    speech_segments = []
+                    for start_time, end_time in vad_segments:
+                        start_idx = int(start_time * sr)
+                        end_idx = int(end_time * sr)
+                        # Ensure indices are within bounds
+                        start_idx = max(0, min(start_idx, len(audio)))
+                        end_idx = max(start_idx, min(end_idx, len(audio)))
+                        if end_idx > start_idx:
+                            speech_segments.append(audio[start_idx:end_idx])
+                    
+                    # Concatenate speech segments
+                    if speech_segments:
+                        audio = np.concatenate(speech_segments)
+        except Exception as e:
+            logging.warning(f"VAD processing failed, using full audio: {e}")
+            vad_segments = None
     if backend == "faster-whisper":
         model = FasterWhisperModel(pipe, device="cuda" if torch.cuda.is_available() else "cpu")
         segments, info = model.transcribe(audio, beam_size=5, language=language, word_timestamps=True)
