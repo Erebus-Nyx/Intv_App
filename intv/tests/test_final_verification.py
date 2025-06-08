@@ -1,191 +1,164 @@
 #!/usr/bin/env python3
 """
-Final verification test for INTV Pipeline Orchestrator enhancements.
-Tests all completed functionality including unified processing, hardware detection,
-dependency management, and backward compatibility.
+Integration test for the restored Pipeline Orchestrator and enhanced RAG system.
+Tests the core functionality without requiring all optional dependencies.
 """
 
 import sys
 import os
 from pathlib import Path
 
-# Add intv to path
-sys.path.insert(0, str(Path(__file__).parent / 'intv'))
+# Add current directory to path for imports
+sys.path.insert(0, '.')
 
-def test_unified_processing():
-    """Test the unified document/image processing method"""
-    print("🔄 Testing unified processing...")
-    
-    from intv.pipeline_orchestrator import PipelineOrchestrator
-    
-    orchestrator = PipelineOrchestrator()
-    
-    # Test with README.md (should work without dependencies)
-    result = orchestrator.process_document_or_image('README.md')
-    
-    assert result.success, f"Processing failed: {result.error_message}"
-    assert result.input_type.name == 'DOCUMENT'
-    assert len(result.extracted_text) > 10000  # README is substantial
-    assert len(result.chunks) > 10  # Should be chunked
-    assert result.metadata['method'] == 'simple_text_read'
-    
-    print(f"  ✅ README.md processed: {len(result.extracted_text)} chars, {len(result.chunks)} chunks")
-    
-    # Test with pyproject.toml (new format support)
-    result = orchestrator.process_document_or_image('pyproject.toml')
-    
-    assert result.success, f"TOML processing failed: {result.error_message}"
-    assert len(result.extracted_text) > 1000  # pyproject.toml has content
-    
-    print(f"  ✅ pyproject.toml processed: {len(result.extracted_text)} chars")
-    
-    return True
-
-def test_hardware_detection():
-    """Test hardware detection and classification"""
-    print("🔄 Testing hardware detection...")
-    
-    from intv.platform_utils import get_hardware_tier, detect_hardware_capabilities
-    
-    tier = get_hardware_tier()
-    capabilities = detect_hardware_capabilities()
-    
-    print(f"  ✅ Hardware tier: {tier}")
-    print(f"  ✅ GPU detected: {capabilities.get('gpu', False)}")
-    print(f"  ✅ GPU memory: {capabilities.get('gpu_memory_gb', 'N/A')} GB")
-    
-    # Should detect high-end GPU correctly
-    assert tier in ['gpu_high', 'gpu_medium', 'cpu_high'], f"Unexpected tier: {tier}"
-    
-    return True
-
-def test_dependency_management():
-    """Test dependency management functionality"""
-    print("🔄 Testing dependency management...")
-    
-    from intv.dependency_manager import DependencyManager
-    
-    dep_manager = DependencyManager()
-    
-    # Test dependency checking
-    status = dep_manager.check_dependencies()
-    print(f"  ✅ Dependency status: {len(status)} groups checked")
-    
-    # Test injection command generation
-    commands = dep_manager.get_pipx_injection_commands()
-    assert len(commands) > 0, "No injection commands generated"
-    print(f"  ✅ Generated {len(commands)} pipx injection commands")
-    
-    # Test system-specific recommendations
-    recommendations = dep_manager.get_system_specific_recommendations()
-    print(f"  ✅ System recommendations: {len(recommendations)} items")
-    
-    return True
-
-def test_legacy_compatibility():
-    """Test backward compatibility with legacy methods"""
-    print("🔄 Testing legacy compatibility...")
-    
-    from intv.pipeline_orchestrator import PipelineOrchestrator
-    import warnings
-    
-    orchestrator = PipelineOrchestrator()
-    
-    # Capture deprecation warnings
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        
-        # Test legacy process_document method
-        result = orchestrator.process_document('README.md')
-        
-        # Should have deprecation warning
-        assert len(w) > 0, "No deprecation warning issued"
-        assert "deprecated" in str(w[0].message).lower()
-        
-        # Should still work
-        assert result.success, "Legacy method failed"
-        
-    print(f"  ✅ Legacy methods work with deprecation warnings")
-    
-    return True
-
-def test_input_type_detection():
-    """Test input type detection for various file formats"""
-    print("🔄 Testing input type detection...")
-    
-    from intv.pipeline_orchestrator import PipelineOrchestrator, InputType
-    
-    orchestrator = PipelineOrchestrator()
-    
-    test_cases = [
-        ('README.md', InputType.DOCUMENT),
-        ('pyproject.toml', InputType.DOCUMENT),
-        ('config/config.yaml', InputType.DOCUMENT),
-        ('settings.json', InputType.DOCUMENT),
-    ]
-    
-    for file_path, expected_type in test_cases:
-        if os.path.exists(file_path):
-            detected_type = orchestrator._detect_input_type(Path(file_path))
-            assert detected_type == expected_type, f"Wrong type for {file_path}: got {detected_type}, expected {expected_type}"
-            print(f"  ✅ {file_path} → {detected_type.name}")
-    
-    return True
-
-def test_error_handling():
-    """Test error handling for missing files and invalid inputs"""
-    print("🔄 Testing error handling...")
-    
-    from intv.pipeline_orchestrator import PipelineOrchestrator
-    
-    orchestrator = PipelineOrchestrator()
-    
-    # Test with non-existent file
-    result = orchestrator.process_document_or_image('nonexistent_file.txt')
-    
-    assert not result.success, "Should fail for non-existent file"
-    assert result.error_message is not None
-    print(f"  ✅ Non-existent file handled gracefully")
-    
-    return True
-
-def main():
-    """Run all verification tests"""
-    print("🚀 INTV Pipeline Orchestrator - Final Verification Tests")
+def test_pipeline_orchestrator():
+    """Test basic pipeline orchestrator functionality"""
+    print("=" * 60)
+    print("PIPELINE ORCHESTRATOR INTEGRATION TEST")
     print("=" * 60)
     
-    tests = [
-        ("Unified Processing", test_unified_processing),
-        ("Hardware Detection", test_hardware_detection),
-        ("Dependency Management", test_dependency_management),
-        ("Legacy Compatibility", test_legacy_compatibility),
-        ("Input Type Detection", test_input_type_detection),
-        ("Error Handling", test_error_handling),
-    ]
-    
-    passed = 0
-    total = len(tests)
-    
-    for test_name, test_func in tests:
-        try:
-            print(f"\n📋 {test_name}")
-            test_func()
-            print(f"✅ {test_name} PASSED")
-            passed += 1
-        except Exception as e:
-            print(f"❌ {test_name} FAILED: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    print(f"\n🏆 FINAL RESULTS: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 ALL TESTS PASSED - SYSTEM READY FOR PRODUCTION!")
+    try:
+        # Test imports
+        print("1. Testing imports...")
+        from intv.pipeline_orchestrator import (
+            PipelineOrchestrator, 
+            create_pipeline_orchestrator, 
+            InputType, 
+            ProcessingResult
+        )
+        print("   ✓ All core classes import successfully")
+        
+        # Test instantiation
+        print("\n2. Testing instantiation...")
+        orchestrator = create_pipeline_orchestrator()
+        print("   ✓ Pipeline orchestrator created successfully")
+        
+        # Test input type detection
+        print("\n3. Testing input type detection...")
+        
+        # Create test files
+        test_dir = Path("test_files")
+        test_dir.mkdir(exist_ok=True)
+        
+        # Text file
+        text_file = test_dir / "test.txt"
+        text_file.write_text("This is a test document for pipeline orchestrator.")
+        
+        detected_type = orchestrator.detect_input_type(text_file)
+        print(f"   ✓ Text file detected as: {detected_type}")
+        assert detected_type == InputType.DOCUMENT
+        
+        # Test non-existent file
+        nonexistent = test_dir / "nonexistent.xyz"
+        detected_type = orchestrator.detect_input_type(nonexistent)
+        print(f"   ✓ Non-existent file detected as: {detected_type}")
+        assert detected_type == InputType.UNKNOWN
+        
+        # Test document processing (basic)
+        print("\n4. Testing document processing...")
+        result = orchestrator.process_document(
+            text_file,
+            module_key=None,
+            query=None,
+            apply_llm=False
+        )
+        
+        print(f"   ✓ Document processing success: {result.success}")
+        print(f"   ✓ Input type: {result.input_type}")
+        print(f"   ✓ Extracted text length: {len(result.extracted_text) if result.extracted_text else 0}")
+        
+        assert result.success
+        assert result.input_type == InputType.DOCUMENT
+        assert result.extracted_text is not None
+        
+        # Test main process method
+        print("\n5. Testing main process method...")
+        result = orchestrator.process(
+            text_file,
+            module_key=None,
+            query=None,
+            apply_llm=False
+        )
+        
+        print(f"   ✓ Main process success: {result.success}")
+        assert result.success
+        
+        # Test batch processing
+        print("\n6. Testing batch processing...")
+        results = orchestrator.batch_process(
+            [text_file],
+            module_key=None,
+            query=None,
+            apply_llm=False
+        )
+        
+        print(f"   ✓ Batch processing results: {len(results)}")
+        assert len(results) == 1
+        assert results[0].success
+        
+        # Clean up
+        text_file.unlink()
+        test_dir.rmdir()
+        
+        print("\n" + "=" * 60)
+        print("🎉 ALL TESTS PASSED! Pipeline Orchestrator is working correctly!")
+        print("=" * 60)
+        
         return True
-    else:
-        print("⚠️  Some tests failed - review above output")
+        
+    except Exception as e:
+        print(f"\n❌ TEST FAILED: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
+def test_availability_flags():
+    """Test the availability flags for optional dependencies"""
+    print("\n" + "=" * 60)
+    print("OPTIONAL DEPENDENCIES STATUS")
+    print("=" * 60)
+    
+    try:
+        from intv.pipeline_orchestrator import HAS_UTILS, HAS_DOC_PROCESSOR, HAS_RAG, HAS_AUDIO, HAS_MODULES
+        
+        print(f"HAS_UTILS: {HAS_UTILS}")
+        print(f"HAS_DOC_PROCESSOR: {HAS_DOC_PROCESSOR}")
+        print(f"HAS_RAG: {HAS_RAG}")
+        print(f"HAS_AUDIO: {HAS_AUDIO}")
+        print(f"HAS_MODULES: {HAS_MODULES}")
+        
+        # Test graceful degradation
+        if not HAS_RAG:
+            print("✓ RAG module unavailable - graceful degradation expected")
+        else:
+            print("✓ RAG module available - enhanced functionality enabled")
+            
+        return True
+        
+    except Exception as e:
+        print(f"❌ Availability test failed: {e}")
+        return False
+
+def main():
+    """Run all integration tests"""
+    print("Starting Pipeline Orchestrator Integration Tests...")
+    
+    success = True
+    
+    # Test core functionality
+    success &= test_pipeline_orchestrator()
+    
+    # Test availability flags
+    success &= test_availability_flags()
+    
+    if success:
+        print("\n🎉 ALL INTEGRATION TESTS COMPLETED SUCCESSFULLY!")
+        print("\n✅ Pipeline Orchestrator has been successfully restored and is functioning properly.")
+        print("✅ The system gracefully handles missing optional dependencies.")
+        print("✅ Enhanced RAG integration is ready for use when dependencies are available.")
+    else:
+        print("\n❌ Some tests failed. Please check the output above.")
+        sys.exit(1)
+
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()

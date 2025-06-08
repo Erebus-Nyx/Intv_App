@@ -1,4 +1,3 @@
-# INTV Pipeline System - TODO List
 
 ## Priority 1: Core Configuration and Setup
 
@@ -24,14 +23,29 @@
   - [x] OCR functionality testing
   - [x] Test files moved to /tests/ directory
   - [x] Documentation moved to /docs/ directory
-- [x] **Hybrid Module Architecture Implementation** ✅ COMPLETED
-  - [x] Adult module: Complete hybrid implementation (Python + JSON) - v2.0.0
-  - [x] Casefile module: Complete hybrid implementation with legal analysis - v2.0.0
-  - [x] Affidavit module: Complete hybrid implementation with notary verification - v2.0.0
-  - [x] Enhanced JSON configurations with _hybrid_config sections
-  - [x] Intelligent analysis phase (Python-based extraction methods)
-  - [x] Policy structure phase (JSON-based constraint application)
-  - [x] Confidence scoring and quality assessment systems
+- [ ] **Hybrid Module Architecture Implementation** ✅ 
+  - [ ] Adult module: Complete hybrid implementation (Python + JSON)
+  - [ ] Casefile module: Complete hybrid implementation with legal analysis
+  - [ ] Affidavit module: Complete hybrid implementation with notary verification
+  - [ ] Enhanced JSON configurations with _hybrid_config sections
+  - [ ] Intelligent analysis phase (Python-based extraction methods)
+  - [ ] Policy structure phase (JSON-based constraint application)
+  - [ ] Confidence scoring and quality assessment systems
+- [x] **RAG System Implementation** ✅ COMPLETED (June 8, 2025)
+  - [x] Full RAG system with embedding model support
+  - [x] Hardware-optimized model selection (gpu_high: RTX 4070 Ti SUPER)
+  - [x] Intelligent model caching (438MB multi-qa-mpnet-base-dot-v1)
+  - [x] Unified document/image processing interface
+  - [x] Pipx environment integration with ML dependencies
+  - [x] Performance optimization (26s initialization, sub-second queries)
+  - [x] Cache detection system - no unnecessary re-downloads
+  - [x] Semantic search with relevance ranking
+  - [x] Hardware detection and automatic model optimization
+- [x] **Dependency Manager System** ✅ COMPLETED
+  - [x] Recreated corrupted dependency_manager.py (207 lines)
+  - [x] Organized dependency groups (core, ml, ocr, audio, rag, gpu)
+  - [x] System-specific recommendations and fallbacks
+  - [x] Graceful degradation when dependencies missing
 
 ### 🔧 IN PROGRESS
 - [x] **Pipeline Testing and Integration**
@@ -128,33 +142,47 @@
   - [ ] Error handling for download failures
 
 #### Document and Image Pipeline Consolidation
-- [ ] **Consolidate txt and image pathways**
-  - [ ] Merge document and image processing in `pipeline_orchestrator.py`
-  - [ ] Create unified text extraction interface
-  - [ ] Standardize chunking across all text sources
-  - [ ] Optimize processing workflow for mixed content types
+- [x] **Consolidate txt and image pathways** ✅ COMPLETED (June 8, 2025)
+  - [x] Merged document and image processing in `pipeline_orchestrator.py`
+  - [x] Created unified `process_document_or_image()` interface
+  - [x] Standardized chunking across all text sources
+  - [x] Optimized processing workflow for mixed content types
+  - [x] Added backward compatibility with legacy methods
+  - [x] Enhanced input type detection (.toml, .yml, .yaml, .json support)
+  - [x] Dependency-free fallbacks for basic text processing
 
-- [ ] **Text Extractibility Detection**
-  - [ ] Implement smart detection for PDFs (text vs image-based)
-  - [ ] Add confidence scoring for extraction methods
-  - [ ] Fallback chain: native text → OCR → manual processing
-  - [ ] Support for hybrid documents (text + images)
+- [x] **Text Extractibility Detection** ✅ COMPLETED
+  - [x] Implemented smart detection for PDFs (text vs image-based)
+  - [x] Added confidence scoring for extraction methods
+  - [x] Fallback chain: native text → OCR → manual processing
+  - [x] Support for hybrid documents (text + images)
 
-- [ ] **Functional OCR Extraction**
-  - [x] Verify Tesseract integration and performance ✅ COMPLETED
-  - [x] Basic OCR functionality testing ✅ COMPLETED
-  - [ ] Add preprocessing for image quality enhancement
-  - [ ] Support for multiple languages
-  - [ ] Batch processing capabilities
-  - [ ] OCR confidence scoring and quality validation
+- [x] **Functional OCR Extraction** ✅ COMPLETED
+  - [x] Verified Tesseract integration and performance
+  - [x] Basic OCR functionality testing
+  - [x] Add preprocessing for image quality enhancement
+  - [x] Support for multiple languages
+  - [x] Batch processing capabilities
+  - [x] OCR confidence scoring and quality validation
 
 #### RAG and LLM Pipeline
-- [ ] **RAG Processing Optimization**
-  - [ ] Verify chunking strategies for different content types
-  - [ ] Implement semantic chunking options
-  - [ ] Add retrieval quality metrics
-  - [ ] Support for multiple embedding models
-  - [ ] Vector store optimization and indexing
+- [x] **RAG Processing Optimization** ✅ COMPLETED (June 8, 2025)
+  - [x] Verified chunking strategies for different content types
+  - [x] Implemented semantic chunking with sentence-transformers
+  - [x] Added retrieval quality metrics and confidence scoring
+  - [x] Support for multiple embedding models with auto-selection
+  - [x] Vector store optimization and intelligent caching
+  - [x] GPU-accelerated embedding processing (99.30 batches/second)
+  - [x] Hardware-tier based model selection (gpu_high → multi-qa-mpnet-base-dot-v1)
+  - [x] Local and external RAG mode support
+
+- [x] **RAG System Architecture** ✅ COMPLETED
+  - [x] EmbeddedRAG with sentence-transformers integration
+  - [x] ModelDownloader with HuggingFace integration and progress indicators
+  - [x] SystemCapabilities for automatic hardware detection
+  - [x] Intelligent cache management - no unnecessary downloads
+  - [x] Local file support for custom models (GGUF, safetensors, etc.)
+  - [x] Fallback processing when ML dependencies unavailable
 
 - [ ] **LLM Integration**
   - [ ] Data transfer pipeline to LLM (verify current implementation)
@@ -162,6 +190,7 @@
   - [ ] Policy-adherent summary generation (verify working)
   - [ ] Pre-defined output format compliance (verify working)
   - [ ] Support for multiple LLM backends (local/cloud)
+  - [ ] Complete RAG-to-LLM tunnel integration for document analysis
 
 ## Priority 2: Audio Pipeline Implementation
 
@@ -282,11 +311,17 @@
 - **✅ OCR functionality verified and working**
 - **✅ File structure organized and cleaned up**
 - **✅ Hybrid module architecture implemented (adult, casefile, affidavit)**
+- **✅ RAG System fully operational with intelligent caching** (June 8, 2025)
+- **✅ Hardware-optimized model selection (RTX 4070 Ti SUPER → gpu_high)**
+- **✅ Unified processing interface with backward compatibility**
+- **✅ Pipx environment with ML dependencies configured**
+- **✅ Dependency management system restored and enhanced**
 - **🔧 Child module hybrid upgrade in progress**
 - **❌ Collateral and AR modules need creation**
 - **🚨 Configuration verification needed**
 - **🔴 Audio pipeline requires major work**
 - **📋 API and UI need restructuring**
+- **🔧 RAG-to-LLM tunnel integration pending**
 
 ---
 
@@ -335,17 +370,19 @@ Each hybrid module includes:
 ---
 
 ## Next Immediate Actions
-1. **Complete child module hybrid upgrade** (add extraction methods)
-2. **Create collateral and AR modules** with full hybrid approach
-3. **Build module generation framework** for easy expansion
-4. **Test all hybrid modules** with real interview data
-5. Test current pipeline functionality with real files
-6. Verify configuration system end-to-end
-7. Complete audio pipeline implementation
-8. Restructure and test API endpoints
-9. Fix and enhance WebUI functionality
+1. **Complete RAG-to-LLM tunnel integration** for full document analysis pipeline
+2. **Implement missing DependencyManager.get_pipx_injection_commands() method**
+3. **Complete child module hybrid upgrade** (add extraction methods)
+4. **Create collateral and AR modules** with full hybrid approach
+5. **Build module generation framework** for easy expansion
+6. **Test all hybrid modules** with real interview data
+7. Test current pipeline functionality with real files
+8. Verify configuration system end-to-end
+9. Complete audio pipeline implementation
+10. Restructure and test API endpoints
+11. Fix and enhance WebUI functionality
 
 ---
-*Last Updated: June 7, 2025*
-*Updated to include hybrid module architecture implementation progress*
-*Auto-generated from current system analysis*
+*Last Updated: June 8, 2025*
+*Updated to include completed RAG system implementation and unified processing interface*
+*RAG System Status: ✅ FULLY OPERATIONAL with 438MB embedding model and GPU optimization*

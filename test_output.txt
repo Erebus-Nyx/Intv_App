@@ -1,0 +1,18 @@
+Processing Result: SUCCESS
+Input Type: document
+
+Extracted Text (157 chars):
+--------------------------------------------------
+This is a test document for basic processing.
+It contains some simple text that should be processed.
+The pipeline should work without requiring any modules.
+
+
+Chunks: 1
+  Chunk 1: This is a test document for basic processing.
+It contains some simple text that should be processed....
+
+Metadata: {
+  "method": "simple_text_read",
+  "file_type": ".txt"
+}
