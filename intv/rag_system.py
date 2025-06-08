@@ -179,6 +179,10 @@ class ModelDownloader:
         
     def parse_model_string(self, model_string: str) -> tuple:
         """Parse model string to extract repo_id and filename if specified"""
+        # Check if it's a local file/directory path
+        if self.is_local_path(model_string):
+            return None, model_string  # Return None for repo_id to indicate local file
+            
         if model_string.startswith('hf.co/'):
             model_string = model_string[6:]  # Remove 'hf.co/' prefix
             
@@ -187,6 +191,33 @@ class ModelDownloader:
             return repo_id, filename
         else:
             return model_string, None
+    
+    def is_local_path(self, model_string: str) -> bool:
+        """Check if model_string refers to a local file or directory"""
+        # Check for absolute paths
+        if model_string.startswith('/'):
+            return True
+        
+        # Check for relative paths starting with ./ or ../
+        if model_string.startswith('./') or model_string.startswith('../'):
+            return True
+            
+        # Check for common file extensions without repo format
+        file_extensions = ['.gguf', '.safetensors', '.bin', '.pt', '.pth', '.onnx']
+        if any(model_string.endswith(ext) for ext in file_extensions):
+            return True
+            
+        # Check if it's a directory that exists locally
+        path = Path(model_string)
+        if path.exists():
+            return True
+            
+        # Check if it's in the models directory
+        models_path = self.model_dir / model_string
+        if models_path.exists():
+            return True
+            
+        return False
     
     def download_with_progress(self, url: str, dest_path: Path, desc: str = "Downloading"):
         """Download file with progress bar"""
@@ -219,23 +250,119 @@ class ModelDownloader:
         """Check if model is already downloaded"""
         repo_id, filename = self.parse_model_string(model_string)
         
-        # For sentence transformers, check if directory exists
-        if not filename:
-            model_path = self.model_dir / repo_id.replace('/', '--')
-            return model_path.exists() and any(model_path.iterdir())
+        # Handle local files
+        if repo_id is None:  # This means it's a local file
+            # filename contains the full path for local files
+            local_path = Path(filename)
+            
+            # Check absolute path
+            if local_path.is_absolute() and local_path.exists():
+                return True
+                
+            # Check relative to current directory
+            if local_path.exists():
+                return True
+                
+            # Check relative to models directory
+            models_path = self.model_dir / filename
+            if models_path.exists():
+                return True
+                
+            # Check if it's just a filename in models directory
+            if not local_path.is_absolute() and '/' not in filename:
+                direct_path = self.model_dir / filename
+                if direct_path.exists():
+                    return True
+                    
+            return False
         
-        # For specific files, check if file exists
-        model_path = self.model_dir / repo_id.replace('/', '--') / filename
-        return model_path.exists()
+        # Handle HuggingFace repo models (existing logic)
+        # For full models (no specific filename)
+        if not filename:
+            # Check custom directory structure
+            model_path = self.model_dir / repo_id.replace('/', '--')
+            if model_path.exists() and any(model_path.iterdir()):
+                return True
+            
+            # Check HuggingFace cache structure (used by sentence-transformers)
+            hf_cache_path = self.model_dir / f"models--{repo_id.replace('/', '--')}"
+            if hf_cache_path.exists() and any(hf_cache_path.iterdir()):
+                return True
+                
+            # Check sentence-transformers cache
+            st_cache_path = self.model_dir / ".cache" / "huggingface" / "hub" / f"models--{repo_id.replace('/', '--')}"
+            if st_cache_path.exists():
+                return True
+                
+            return False
+        
+        # For specific files from HuggingFace (GGUF, safetensors, etc.)
+        # Check multiple possible locations
+        possible_paths = [
+            # Standard HF cache structure
+            self.model_dir / repo_id.replace('/', '--') / filename,
+            # HF cache blobs structure
+            self.model_dir / f"models--{repo_id.replace('/', '--')}" / "blobs" / filename,
+            # Direct in models folder (common for GGUF)
+            self.model_dir / filename,
+            # In repo folder directly
+            self.model_dir / repo_id.replace('/', '--') / filename,
+            # Nested cache structure
+            self.model_dir / ".cache" / "huggingface" / "hub" / f"models--{repo_id.replace('/', '--')}" / "blobs" / filename
+        ]
+        
+        # Also check for the actual file hash names in HF cache
+        if filename.endswith('.gguf') or filename.endswith('.safetensors'):
+            # Check HF cache structure with hash filenames
+            cache_dir = self.model_dir / f"models--{repo_id.replace('/', '--')}"
+            if cache_dir.exists():
+                blobs_dir = cache_dir / "blobs"
+                if blobs_dir.exists():
+                    # Any file in blobs dir indicates model is downloaded
+                    if any(blobs_dir.iterdir()):
+                        return True
+        
+        return any(path.exists() for path in possible_paths)
     
     def download_model(self, model_string: str, force: bool = False) -> Path:
         """Download model from HuggingFace with progress indicator"""
+        repo_id, filename = self.parse_model_string(model_string)
+        
+        # Handle local files - don't download, just return path
+        if repo_id is None:  # Local file
+            local_path = Path(filename)
+            
+            # Check absolute path
+            if local_path.is_absolute() and local_path.exists():
+                print(f"📁 Using local model: {local_path}")
+                return local_path
+                
+            # Check relative to current directory
+            if local_path.exists():
+                print(f"📁 Using local model: {local_path.resolve()}")
+                return local_path.resolve()
+                
+            # Check relative to models directory
+            models_path = self.model_dir / filename
+            if models_path.exists():
+                print(f"📁 Using local model from models dir: {models_path}")
+                return models_path
+                
+            # Check if it's just a filename in models directory
+            if not local_path.is_absolute() and '/' not in filename:
+                direct_path = self.model_dir / filename
+                if direct_path.exists():
+                    print(f"📁 Using local model: {direct_path}")
+                    return direct_path
+                    
+            # Local file not found
+            raise FileNotFoundError(f"Local model file not found: {filename}")
+        
+        # Handle HuggingFace models
         if not force and self.is_model_downloaded(model_string):
-            logger.info(f"Model {model_string} already downloaded")
-            repo_id, _ = self.parse_model_string(model_string)
+            print(f"✅ Model already downloaded: {model_string}")
             return self.model_dir / repo_id.replace('/', '--')
         
-        repo_id, filename = self.parse_model_string(model_string)
         local_dir = self.model_dir / repo_id.replace('/', '--')
         local_dir.mkdir(exist_ok=True)
         
@@ -245,30 +372,36 @@ class ModelDownloader:
             if HAS_SENTENCE_TRANSFORMERS and not filename:
                 # Use sentence-transformers for full model download
                 print(f"⚡ Using sentence-transformers for {repo_id}")
+                # Simply download to cache folder and let sentence-transformers handle it
                 model = SentenceTransformer(repo_id, cache_folder=str(self.model_dir))
-                # Move to expected location
-                cache_dir = Path(model._modules['0'].auto_model.config._name_or_path)
-                if cache_dir != local_dir:
-                    if local_dir.exists():
-                        shutil.rmtree(local_dir)
-                    shutil.move(str(cache_dir), str(local_dir))
+                print(f"✅ Model downloaded and cached via sentence-transformers")
+                return self.model_dir / repo_id.replace('/', '--')
                 
-            elif HAS_TRANSFORMERS:
-                # Use transformers for model download
-                print(f"🤗 Using transformers for {repo_id}")
+            elif HAS_TRANSFORMERS or filename:
+                # Use transformers for model download, or handle specific files
                 if filename:
-                    # Download specific file
-                    from huggingface_hub import hf_hub_download
-                    file_path = hf_hub_download(
-                        repo_id=repo_id,
-                        filename=filename,
-                        cache_dir=str(self.model_dir),
-                        local_dir=str(local_dir)
-                    )
-                else:
+                    print(f"📁 Downloading specific file: {filename} from {repo_id}")
+                    try:
+                        from huggingface_hub import hf_hub_download
+                        file_path = hf_hub_download(
+                            repo_id=repo_id,
+                            filename=filename,
+                            cache_dir=str(self.model_dir),
+                            local_dir=str(local_dir)
+                        )
+                        print(f"✅ File downloaded to: {file_path}")
+                        return Path(file_path).parent
+                    except ImportError:
+                        logger.error("huggingface_hub not available for file download")
+                        print("❌ huggingface_hub not available - cannot download GGUF/specific files")
+                        raise
+                elif HAS_TRANSFORMERS:
+                    print(f"🤗 Using transformers for full model: {repo_id}")
                     # Download full model
                     AutoTokenizer.from_pretrained(repo_id, cache_dir=str(local_dir))
                     AutoModel.from_pretrained(repo_id, cache_dir=str(local_dir))
+                else:
+                    raise ImportError("No suitable download method available")
             else:
                 raise ImportError("Neither sentence-transformers nor transformers available")
                 
@@ -299,22 +432,57 @@ class EmbeddedRAG:
             model_string = SystemCapabilities.get_default_model(system_type)
             print(f"🎯 Auto-selected model for {system_type}: {model_string}")
         
-        # Download model if needed
-        try:
-            model_path = self.downloader.download_model(model_string)
-            
-            # Load model
-            if HAS_SENTENCE_TRANSFORMERS:
-                repo_id, _ = self.downloader.parse_model_string(model_string)
-                self.model = SentenceTransformer(str(model_path))
-                print(f"✅ Loaded embedding model: {model_string}")
-            else:
-                logger.warning("sentence-transformers not available, using fallback")
-                self.model = None
+        # Check if it's a local file first
+        repo_id, filename = self.downloader.parse_model_string(model_string)
+        
+        if repo_id is None:  # Local file
+            # Handle local models - don't download, just load
+            try:
+                model_path = self.downloader.download_model(model_string)  # This will just validate and return path
                 
-        except Exception as e:
-            logger.error(f"Failed to initialize embedding model: {e}")
-            self.model = None
+                if HAS_SENTENCE_TRANSFORMERS:
+                    # Try loading local model with sentence-transformers
+                    try:
+                        self.model = SentenceTransformer(str(model_path))
+                        print(f"✅ Loaded local embedding model: {model_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to load local model {model_path}: {e}")
+                        print(f"❌ Failed to load local model {model_path}: {e}")
+                        self.model = None
+                else:
+                    logger.warning("sentence-transformers not available for local model loading")
+                    self.model = None
+                    
+            except FileNotFoundError as e:
+                logger.error(f"Local model file not found: {e}")
+                print(f"❌ Local model file not found: {e}")
+                self.model = None
+            except Exception as e:
+                logger.error(f"Failed to initialize local model: {e}")
+                self.model = None
+        else:
+            # Handle HuggingFace models (existing logic)
+            try:
+                model_path = self.downloader.download_model(model_string)
+                
+                # Load model
+                if HAS_SENTENCE_TRANSFORMERS:
+                    # Try loading from repo ID first (recommended approach)
+                    try:
+                        self.model = SentenceTransformer(repo_id, cache_folder=str(self.downloader.model_dir))
+                        print(f"✅ Loaded embedding model from repo: {repo_id}")
+                    except Exception as e:
+                        # Fallback: try loading from local path
+                        logger.warning(f"Failed to load from repo {repo_id}, trying local path: {e}")
+                        self.model = SentenceTransformer(str(model_path))
+                        print(f"✅ Loaded embedding model from path: {model_path}")
+                else:
+                    logger.warning("sentence-transformers not available, using fallback")
+                    self.model = None
+                    
+            except Exception as e:
+                logger.error(f"Failed to initialize embedding model: {e}")
+                self.model = None
     
     def encode_texts(self, texts: List[str]):
         """Encode texts into embeddings"""

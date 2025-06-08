@@ -41,7 +41,7 @@ coverage.xml
 .pytest_cache/
 
 # LLM models and data
-.models/
+models/
 *.gguf
 
 # Jupyter Notebook

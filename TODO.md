@@ -57,6 +57,13 @@
 
 ### 🚨 HIGH PRIORITY
 
+#### 🔴 CRITICAL - Dependency Manager Method Missing
+- [ ] **Fix DependencyManager.get_pipx_injection_commands() method**
+  - [ ] Add missing `get_pipx_injection_commands()` method to DependencyManager class
+  - [ ] Method keeps failing to be added despite multiple attempts
+  - [ ] Critical for pipx installation guidance and dependency management
+  - [ ] Required for test verification and production deployment
+
 #### Hybrid Module System Completion
 - [ ] **Complete Remaining Module Implementations**
   - [ ] Finish child module hybrid upgrade (partially complete)
