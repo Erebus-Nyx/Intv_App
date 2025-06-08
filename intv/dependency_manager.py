@@ -154,6 +154,48 @@ class DependencyManager:
         
         return "\n".join(guide)
     
+    def get_pipx_injection_commands(self, missing_only: bool = True) -> List[str]:
+        """Get pipx injection commands for installing dependencies.
+        
+        Args:
+            missing_only: If True, only return commands for missing dependencies
+            
+        Returns:
+            List of pipx inject commands
+        """
+        commands = []
+        
+        for group_name, group_info in self.DEPENDENCY_GROUPS.items():
+            if missing_only:
+                # Only include if there are missing packages in this group
+                if group_name in self.status and self.status[group_name]['missing']:
+                    commands.append(group_info['install_cmd'])
+            else:
+                # Include all commands
+                commands.append(group_info['install_cmd'])
+        
+        # Add system-specific recommendations
+        if not missing_only or (missing_only and self._has_missing_packages()):
+            system_info = self._get_system_info()
+            if system_info['gpu']['has_cuda']:
+                commands.append("# GPU support (CUDA detected):")
+                commands.append("pipx inject intv torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
+            elif system_info['gpu']['has_rocm']:
+                commands.append("# GPU support (ROCm detected):")
+                commands.append("pipx inject intv torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.6")
+            elif system_info['platform'] == 'darwin':
+                commands.append("# Apple Silicon GPU support:")
+                commands.append("pipx inject intv torch torchvision torchaudio")
+        
+        return commands
+    
+    def _has_missing_packages(self) -> bool:
+        """Check if there are any missing packages across all groups."""
+        for group_status in self.status.values():
+            if group_status['missing']:
+                return True
+        return False
+    
     def print_status(self):
         """Print current dependency status."""
         print(self.get_installation_guide(missing_only=False))

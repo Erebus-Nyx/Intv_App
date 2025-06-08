@@ -435,3 +435,11 @@ def apply_vad_filter_enhanced(audio_path: str,
         # Save filtered audio to temporary file
         temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
         sf.write(temp_file.name, filtered_audio,
+ sample_rate)
+        temp_file.close()
+        
+        return temp_file.name
+    
+    except Exception as e:
+        logger.error(f"Error in enhanced VAD processing: {e}")
+        return audio_path
