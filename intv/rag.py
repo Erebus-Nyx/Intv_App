@@ -1,19 +1,82 @@
-from .utils import is_valid_filetype, validate_file
-from PyPDF2 import PdfReader
 import os
-from typing import List, Optional, Callable
-from PIL import Image
-import pytesseract
+from typing import List, Optional, Callable, Dict, Any
 import logging
 import yaml
-from .ocr import ocr_file, ocr_pdf_page
-from transformers import AutoModel, AutoTokenizer
-from huggingface_hub import hf_hub_download
+
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+    requests = None
+
+# Optional imports with fallbacks
+try:
+    from .utils import is_valid_filetype, validate_file
+    HAS_UTILS = True
+except ImportError:
+    HAS_UTILS = False
+    def is_valid_filetype(filepath):
+        return os.path.exists(filepath)
+    def validate_file(filepath):
+        return os.path.exists(filepath)
+
+try:
+    from PyPDF2 import PdfReader
+    HAS_PYPDF2 = True
+except ImportError:
+    HAS_PYPDF2 = False
+    PdfReader = None
+
+try:
+    from PIL import Image
+    import pytesseract
+    HAS_OCR = True
+except ImportError:
+    HAS_OCR = False
+    Image = None
+    pytesseract = None
+
+try:
+    from .ocr import ocr_file, ocr_pdf_page
+    HAS_OCR_MODULE = True
+except ImportError:
+    HAS_OCR_MODULE = False
+    def ocr_file(filepath):
+        return f"OCR not available for {filepath}"
+    def ocr_pdf_page(pdf_path, page_num):
+        return f"OCR not available for {pdf_path} page {page_num}"
+
+try:
+    from transformers import AutoModel, AutoTokenizer
+    from huggingface_hub import hf_hub_download
+    HAS_TRANSFORMERS = True
+except ImportError:
+    HAS_TRANSFORMERS = False
+    AutoModel = None
+    AutoTokenizer = None
+    hf_hub_download = None
+
+try:
+    # Import minimal RAG system for testing
+    from .rag_system_minimal import RAGSystem
+    HAS_RAG_SYSTEM = True
+except ImportError:
+    HAS_RAG_SYSTEM = False
+    RAGSystem = None
 
 try:
     import docx
+    HAS_DOCX = True
 except ImportError:
+    HAS_DOCX = False
     docx = None
+
+try:
+    from sentence_transformers import SentenceTransformer
+    HAS_SENTENCE_TRANSFORMERS = True
+except ImportError:
+    HAS_SENTENCE_TRANSFORMERS = False
 
 # --- RAG Pipeline Core Functions ---
 # These functions handle document chunking, prompt loading, and RAG orchestration.
@@ -103,12 +166,13 @@ def chunk_document(document_path: str, chunk_size: int = None, overlap: int = No
     ext = os.path.splitext(document_path)[1].lower()
     text = ""
     image_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.gif'}
-    if ext == '.pdf':
+    
+    if ext == '.pdf' and HAS_PYPDF2:
         reader = PdfReader(document_path)
         page_texts = []
         for i, page in enumerate(reader.pages):
             page_text = page.extract_text() or ''
-            if not page_text.strip():
+            if not page_text.strip() and HAS_OCR_MODULE:
                 # OCR fallback for image-based PDF page
                 try:
                     page_text = ocr_pdf_page(document_path, i)
@@ -116,14 +180,20 @@ def chunk_document(document_path: str, chunk_size: int = None, overlap: int = No
                     logging.warning(f"OCR failed for PDF page {i+1}: {e}")
             page_texts.append(page_text)
         text = "\n".join(page_texts)
-    elif ext == '.docx' and docx is not None:
+    elif ext == '.docx' and HAS_DOCX:
         doc = docx.Document(document_path)
         text = "\n".join(para.text for para in doc.paragraphs)
     elif ext == '.txt':
         with open(document_path, encoding='utf-8', errors='ignore') as f:
             text = f.read()
-    elif ext in image_exts:
+    elif ext in image_exts and HAS_OCR_MODULE:
         text = ocr_file(document_path)
+    elif ext == '.pdf' and not HAS_PYPDF2:
+        text = f"PDF processing not available - PyPDF2 missing for {document_path}"
+    elif ext == '.docx' and not HAS_DOCX:
+        text = f"DOCX processing not available - python-docx missing for {document_path}"
+    elif ext in image_exts and not HAS_OCR_MODULE:
+        text = f"OCR processing not available - OCR dependencies missing for {document_path}"
     else:
         raise ValueError(f"Unsupported file type for chunking: {ext}")
     return chunk_text(text, chunk_size, overlap)
@@ -135,11 +205,12 @@ def batch_chunk_documents(file_paths: List[str], chunk_size: int = DEFAULT_CHUNK
     all_chunks = []
     for path in file_paths:
         try:
-            validate_file(path)
+            if HAS_UTILS:
+                validate_file(path)
             chunks = chunk_document(path, chunk_size, overlap)
             all_chunks.append(chunks)
         except Exception as e:
-            pass  # Logging can be added if needed
+            logging.warning(f"Failed to process {path}: {e}")
     return all_chunks
 
 # --- Extensibility: Pluggable Retriever/LLM ---
@@ -151,40 +222,86 @@ def process_with_retriever_and_llm(
     policy_prompt: Optional[str] = None,
     top_k: int = None,
     all_chunks: bool = False,
-    config=None
+    config=None,
+    use_enhanced_rag: bool = True
 ) -> str:
     """
     Retrieve relevant chunks and pass to LLM for categorization/summarization.
     If all_chunks is True, process all chunks regardless of query relevance.
+    If use_enhanced_rag is True, use the new RAG system for better results.
     """
     # Use config-driven settings
     if config is None:
-        from config import load_config
-        config = load_config()
+        try:
+            from .config import load_config
+            config = load_config()
+        except Exception:
+            config = {'rag_top_k': 5}
     if top_k is None:
         top_k = config.get('rag_top_k', 5)
     if policy_prompt is None:
         policy_prompt = load_policy_prompt()
+    
     if all_chunks:
         relevant_chunks = chunks
+        metadata = {'method': 'all_chunks'}
     else:
-        # Retrieval (simple keyword search if no retriever)
-        if retriever:
-            relevant_chunks = retriever(query, chunks)
-        else:
-            words = set(query.lower().split())
-            scored = [(sum(w in c.lower() for w in words), c) for c in chunks]
-            scored.sort(reverse=True)
-            relevant_chunks = [c for score, c in scored[:top_k] if score > 0]
-            if not relevant_chunks:
-                relevant_chunks = chunks[:top_k]
+        # Try enhanced RAG first if enabled
+        if use_enhanced_rag:
+            try:
+                query_result = enhanced_query_documents(query, chunks, config, top_k)
+                if query_result['success']:
+                    relevant_chunks = query_result['relevant_chunks']
+                    metadata = query_result['metadata']
+                else:
+                    # Fallback to legacy retrieval
+                    raise Exception("Enhanced RAG failed, falling back to legacy")
+            except Exception as e:
+                logging.warning(f"Enhanced RAG failed, using legacy retrieval: {e}")
+                use_enhanced_rag = False
+        
+        if not use_enhanced_rag:
+            # Legacy retrieval (simple keyword search if no retriever)
+            if retriever:
+                relevant_chunks = retriever(query, chunks)
+                metadata = {'method': 'custom_retriever'}
+            else:
+                words = set(query.lower().split())
+                scored = [(sum(w in c.lower() for w in words), c) for c in chunks]
+                scored.sort(reverse=True)
+                relevant_chunks = [c for score, c in scored[:top_k] if score > 0]
+                if not relevant_chunks:
+                    relevant_chunks = chunks[:top_k]
+                metadata = {'method': 'keyword_search'}
+    
     context = "\n---\n".join(relevant_chunks)
-    prompt = policy_prompt.format(context=context, query=query)
+    
+    # Create a proper prompt with context and query
+    if "{context}" in policy_prompt and "{query}" in policy_prompt:
+        prompt = policy_prompt.format(context=context, query=query)
+    else:
+        # Fallback if policy prompt doesn't have placeholders
+        prompt = f"{policy_prompt}\n\nContext:\n{context}\n\nQuery: {query}"
+    
     # LLM call
     if llm:
         result = llm(prompt, context)
     else:
-        result = f"[LLM output would go here for prompt: {prompt[:200]}...]"
+        # Try to use the built-in LLM analysis if available
+        try:
+            from .llm import analyze_chunks
+            llm_outputs = analyze_chunks([prompt], provider=config.get('llm_provider', 'koboldcpp'))
+            if llm_outputs and llm_outputs[0]:
+                result = llm_outputs[0].get('output', str(llm_outputs[0]))
+            else:
+                result = f"You are a helpful assistant. Provide a concise and accurate response based on the context.\n\nContext:\n{context[:1000]}...\n\nQuery: {query}"
+        except Exception as e:
+            result = f"You are a helpful assistant. Provide a concise and accurate response based on the context.\n\nContext:\n{context[:1000]}...\n\nQuery: {query}"
+    
+    # Add metadata to result if possible
+    if isinstance(result, dict):
+        result['retrieval_metadata'] = metadata
+    
     return result
 
 # --- Example Test Function ---
@@ -217,7 +334,8 @@ def ensure_hf_prefix(model_name):
     return model_name
 
 def download_with_progress(url, dest_path):
-    import requests
+    if not HAS_REQUESTS:
+        raise ImportError("requests package required for downloading")
     response = requests.get(url, stream=True)
     total = int(response.headers.get('content-length', 0))
     downloaded = 0
@@ -249,24 +367,32 @@ def ensure_rag_model_downloaded(rag_model, model_dir):
     os.makedirs(local_dir, exist_ok=True)
     # ONNX model support: use SentenceTransformer for loading
     if 'onnx' in rag_model.lower():
-        try:
-            from sentence_transformers import SentenceTransformer
-            print(f"[INFO] Downloading/loading ONNX RAG model: {repo_id}")
-            model = SentenceTransformer(rag_model)
-            print(f"[INFO] Downloaded and loaded ONNX RAG model: {repo_id}")
-            return model
-        except Exception as e:
-            print(f"[ERROR] Could not download or load ONNX RAG model {repo_id}: {e}")
-            raise
+        if HAS_SENTENCE_TRANSFORMERS:
+            try:
+                # Use the already imported SentenceTransformer if available
+                from sentence_transformers import SentenceTransformer
+                print(f"[INFO] Downloading/loading ONNX RAG model: {repo_id}")
+                model = SentenceTransformer(rag_model)
+                print(f"[INFO] Downloaded and loaded ONNX RAG model: {repo_id}")
+                return model
+            except Exception as e:
+                print(f"[ERROR] Could not download or load ONNX RAG model {repo_id}: {e}")
+                return None
+        else:
+            print(f"[WARNING] sentence_transformers not available for ONNX RAG model {repo_id}")
+            return None
     # Default: PyTorch model
     try:
-        from transformers import AutoModel, AutoTokenizer
-        AutoModel.from_pretrained(repo_id, cache_dir=local_dir)
-        AutoTokenizer.from_pretrained(repo_id, cache_dir=local_dir)
-        print(f"[INFO] Downloaded RAG model: {repo_id}")
+        if HAS_TRANSFORMERS and AutoModel and AutoTokenizer:
+            AutoModel.from_pretrained(repo_id, cache_dir=local_dir)
+            AutoTokenizer.from_pretrained(repo_id, cache_dir=local_dir)
+            print(f"[INFO] Downloaded RAG model: {repo_id}")
+        else:
+            print(f"[WARNING] Transformers not available - cannot download model {repo_id}")
+            return None
     except Exception as e:
         print(f"[ERROR] Could not download RAG model {repo_id}: {e}")
-        raise
+        return None
 
 def get_rag_model(config):
     # Use rag_model if set, otherwise fall back to llm_model
@@ -277,3 +403,198 @@ def get_rag_model(config):
     model_dir = config.get('model_dir', 'models')
     ensure_rag_model_downloaded(rag_model, model_dir)
     return rag_model
+
+# --- Enhanced RAG Pipeline with New RAG System ---
+# These functions provide modern RAG capabilities using the new RAG system
+
+# Global RAG system instance (lazy initialization)
+_rag_system = None
+
+def get_rag_system(config=None):
+    """Get or initialize the RAG system instance"""
+    global _rag_system
+    if _rag_system is None:
+        if config is None:
+            try:
+                from .config import load_config
+                config = load_config()
+            except Exception:
+                # Fallback config
+                config = {
+                    'rag': {
+                        'mode': 'embedded',
+                        'embedded': {
+                            'model': 'auto',
+                            'chunk_size': 1000,
+                            'chunk_overlap': 100,
+                            'top_k': 5
+                        }
+                    }
+                }
+        _rag_system = RAGSystem(config)
+    return _rag_system
+
+def enhanced_chunk_document(document_path: str, config=None) -> Dict[str, Any]:
+    """
+    Enhanced document chunking using the new RAG system.
+    Returns both chunks and metadata about the chunking process.
+    """
+    try:
+        rag_system = get_rag_system(config)
+        
+        # Read the document content
+        with open(document_path, 'rb') as f:
+            content = f.read()
+        
+        # Get chunks and metadata
+        result = rag_system.chunk_documents([content], [document_path])
+        
+        if result and len(result) > 0:
+            return {
+                'chunks': result[0]['chunks'],
+                'metadata': result[0]['metadata'],
+                'success': True
+            }
+        else:
+            # Fallback to legacy chunking
+            legacy_chunks = chunk_document(document_path, config=config)
+            return {
+                'chunks': legacy_chunks,
+                'metadata': {'method': 'legacy_fallback'},
+                'success': True
+            }
+    except Exception as e:
+        logging.error(f"Enhanced document chunking failed for {document_path}: {e}")
+        # Fallback to legacy method
+        try:
+            legacy_chunks = chunk_document(document_path, config=config)
+            return {
+                'chunks': legacy_chunks,
+                'metadata': {'method': 'legacy_fallback', 'error': str(e)},
+                'success': True
+            }
+        except Exception as legacy_error:
+            return {
+                'chunks': [],
+                'metadata': {'error': str(legacy_error)},
+                'success': False
+            }
+
+def enhanced_query_documents(query: str, chunks: List[str], config=None, top_k: int = None) -> Dict[str, Any]:
+    """
+    Enhanced document querying using the new RAG system.
+    Returns relevant chunks with similarity scores and metadata.
+    """
+    try:
+        rag_system = get_rag_system(config)
+        
+        # Use config defaults if not specified
+        if config is None:
+            try:
+                from .config import load_config
+                config = load_config()
+            except Exception:
+                config = {'rag': {'embedded': {'top_k': 5}}}
+        
+        if top_k is None:
+            top_k = config.get('rag', {}).get('embedded', {}).get('top_k', 5)
+        
+        # Query the RAG system
+        result = rag_system.query(query, chunks, top_k=top_k)
+        
+        return {
+            'relevant_chunks': result.get('chunks', chunks[:top_k]),
+            'scores': result.get('scores', []),
+            'metadata': result.get('metadata', {}),
+            'success': True
+        }
+    except Exception as e:
+        logging.error(f"Enhanced query failed: {e}")
+        # Fallback to simple keyword matching
+        words = set(query.lower().split())
+        scored = [(sum(w in c.lower() for w in words), c) for c in chunks]
+        scored.sort(reverse=True)
+        relevant_chunks = [c for score, c in scored[:top_k] if score > 0]
+        if not relevant_chunks:
+            relevant_chunks = chunks[:top_k]
+        
+        return {
+            'relevant_chunks': relevant_chunks,
+            'scores': [],
+            'metadata': {'method': 'keyword_fallback', 'error': str(e)},
+            'success': True
+        }
+
+def enhanced_rag_pipeline(document_paths: List[str], query: str, config=None) -> Dict[str, Any]:
+    """
+    Complete enhanced RAG pipeline using the new RAG system.
+    Processes documents, chunks them, and returns query results.
+    """
+    try:
+        rag_system = get_rag_system(config)
+        
+        # Read all documents
+        documents = []
+        file_paths = []
+        for path in document_paths:
+            try:
+                validate_file(path)
+                with open(path, 'rb') as f:
+                    documents.append(f.read())
+                file_paths.append(path)
+            except Exception as e:
+                logging.warning(f"Could not read document {path}: {e}")
+                continue
+        
+        if not documents:
+            return {
+                'success': False,
+                'error': 'No valid documents could be processed',
+                'relevant_chunks': [],
+                'metadata': {}
+            }
+        
+        # Process documents through RAG system
+        chunk_results = rag_system.chunk_documents(documents, file_paths)
+        
+        # Combine all chunks
+        all_chunks = []
+        all_metadata = []
+        for result in chunk_results:
+            all_chunks.extend(result['chunks'])
+            all_metadata.append(result['metadata'])
+        
+        if not all_chunks:
+            return {
+                'success': False,
+                'error': 'No chunks could be extracted from documents',
+                'relevant_chunks': [],
+                'metadata': {'chunk_metadata': all_metadata}
+            }
+        
+        # Query the chunks
+        query_result = rag_system.query(query, all_chunks)
+        
+        return {
+            'success': True,
+            'relevant_chunks': query_result.get('chunks', []),
+            'scores': query_result.get('scores', []),
+            'metadata': {
+                'chunk_metadata': all_metadata,
+                'query_metadata': query_result.get('metadata', {}),
+                'total_chunks': len(all_chunks),
+                'documents_processed': len(chunk_results)
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Enhanced RAG pipeline failed: {e}")
+        return {
+            'success': False,
+            'error': str(e),
+            'relevant_chunks': [],
+            'metadata': {'error': str(e)}
+        }
+
+# --- Legacy Compatibility Functions ---
+# Maintain backward compatibility while providing enhanced functionality

@@ -31,8 +31,13 @@ DEFAULT_CONFIG = {
 }
 
 
-def load_config() -> Dict[str, Any]:
-    """Load configuration from config.yaml, then populate settings.json and environment variables."""
+def load_config(config_path: str = None) -> Dict[str, Any]:
+    """
+    Load configuration from config.yaml, then populate settings.json and environment variables.
+    
+    Args:
+        config_path: Optional path to config file (for compatibility)
+    """
     config = DEFAULT_CONFIG.copy()
     
     # First, try to load from config.yaml

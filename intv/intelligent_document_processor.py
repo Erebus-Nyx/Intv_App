@@ -156,8 +156,7 @@ class IntelligentDocumentProcessor:
                 result.chunks = chunk_text(
                     result.extracted_text,
                     chunk_size=self.config.get('chunk_size', 1000),
-                    overlap=self.config.get('chunk_overlap', 100),
-                    config=self.config
+                    overlap=self.config.get('chunk_overlap', 100)
                 )
                 self.logger.info(f"Text chunked into {len(result.chunks)} chunks")
             except Exception as e:

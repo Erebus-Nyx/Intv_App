@@ -20,7 +20,34 @@ llm_provider: "koboldcpp"  # Options: koboldcpp, openai
 # Model name or ID (KoboldCpp default shown)
 model: "hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M"
 
-# Use external RAG service (true/false)
+# RAG Configuration
+rag:
+  # RAG mode: embedded, external_tika, external_haystack
+  mode: "embedded"
+  
+  # Embedded RAG settings
+  embedded:
+    # Model for embeddings (auto-selected based on system if not specified)
+    model: "auto"  # Options: auto, hf.co/sentence-transformers/all-MiniLM-L6-v2, etc.
+    chunk_size: 1000
+    chunk_overlap: 100
+    top_k: 5
+    
+  # External Tika settings
+  external_tika:
+    api_url: "http://localhost:9998"
+    timeout: 30
+    
+  # External Haystack settings  
+  external_haystack:
+    api_url: "http://localhost:8000"
+    api_key: ""
+    timeout: 30
+
+# Model download directory
+model_dir: "models"
+
+# Use external RAG service (true/false) - DEPRECATED, use rag.mode instead
 external_rag: false
 
 # Purge variables from the database on run (true/false)
