@@ -16,23 +16,27 @@ LOG_FILE = os.path.join(LOG_DIR, 'rag_pipeline.log')
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 # --- Configurable Parameters ---
-VALID_FILETYPES = {'.pdf', '.docx', '.txt'}
+VALID_FILETYPES = {'.pdf', '.docx', '.txt', '.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.mp4', '.m4v', '.mov', '.avi', '.wmv', '.flv', '.webm'}
 
 # --- File Validation ---
 def is_valid_filetype(file_path: str) -> bool:
     """
-    Check if the file type is valid for RAG processing.
-    Accepts PDF, DOCX, TXT, and common text-like MIME types.
+    Check if the file type is valid for processing.
+    Accepts PDF, DOCX, TXT, audio, and video files for different processing pipelines.
     """
     ext = os.path.splitext(file_path)[1].lower()
     if ext in VALID_FILETYPES:
         return True
     mime, _ = mimetypes.guess_type(file_path)
-    if mime and (mime.startswith('application/pdf') or mime.startswith('application/msword') or mime.startswith('text/')):
+    if mime and (mime.startswith('application/pdf') or 
+                 mime.startswith('application/msword') or 
+                 mime.startswith('text/') or 
+                 mime.startswith('audio/') or
+                 mime.startswith('video/')):
         return True
     return False
 
-def validate_file(file_path: str, max_size_mb: int = 50) -> None:
+def validate_file(file_path: str, max_size_mb: int = 1000) -> None:
     """
     Raise if file is invalid or too large.
     Logs errors for missing, invalid, or oversized files.

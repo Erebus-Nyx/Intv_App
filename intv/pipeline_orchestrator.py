@@ -73,6 +73,7 @@ class InputType(Enum):
     IMAGE = "image"            # JPG, PNG, etc. (with OCR)
     AUDIO = "audio"            # WAV, MP3, etc.
     MICROPHONE = "microphone"  # Live microphone input
+    VIDEO = "video"            # Video files (processed as audio)
     UNKNOWN = "unknown"
 
 
@@ -156,6 +157,11 @@ class PipelineOrchestrator:
         if ext in audio_exts:
             return InputType.AUDIO
         
+        # Video types
+        video_exts = {'.mp4', '.m4v', '.mov', '.avi', '.wmv', '.flv', '.webm'}
+        if ext in video_exts:
+            return InputType.VIDEO
+        
         return InputType.UNKNOWN
     
     def process(self, 
@@ -186,6 +192,8 @@ class PipelineOrchestrator:
             return self.process_document_or_image(input_path, module_key, query, apply_llm)
         elif input_type == InputType.AUDIO:
             return self.process_audio_file(input_path, module_key, query, apply_llm)
+        elif input_type == InputType.VIDEO:
+            return self.process_video_file(input_path, module_key, query, apply_llm)
         else:
             return ProcessingResult(
                 success=False,
@@ -626,6 +634,55 @@ class PipelineOrchestrator:
                 error_message=str(e)
             )
     
+    def process_video_file(self, 
+                          file_path: Path,
+                          module_key: Optional[str] = None,
+                          query: Optional[str] = None,
+                          apply_llm: bool = True) -> ProcessingResult:
+        """Process video files by extracting audio and processing through audio pipeline"""
+        try:
+            if not HAS_AUDIO:
+                return ProcessingResult(
+                    success=False,
+                    input_type=InputType.AUDIO,
+                    error_message="Audio processing dependencies not available for video processing"
+                )
+            
+            # Validate file
+            if HAS_UTILS:
+                validate_file(str(file_path))
+            
+            # For video files, we extract audio and process through audio pipeline
+            # This is a simplified approach - in practice, you might want to extract audio first
+            # using ffmpeg or similar tool, but for testing we'll process directly
+            
+            # Try to process video as audio (many audio libraries can handle video formats)
+            try:
+                result = self.process_audio_file(file_path, module_key, query, apply_llm)
+                # Update input type to reflect it was originally video
+                if result.success:
+                    result.metadata = result.metadata or {}
+                    result.metadata['original_input_type'] = 'video'
+                    result.metadata['processing_method'] = 'video_to_audio_extraction'
+                return result
+            except Exception as audio_error:
+                self.logger.warning(f"Direct video-as-audio processing failed: {audio_error}")
+                
+                # Return error result
+                return ProcessingResult(
+                    success=False,
+                    input_type=InputType.AUDIO,
+                    error_message=f"Video processing failed: {str(audio_error)}. Consider extracting audio separately."
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Video processing failed: {e}")
+            return ProcessingResult(
+                success=False,
+                input_type=InputType.AUDIO,
+                error_message=str(e)
+            )
+
     def batch_process(self, 
                      input_paths: List[Union[str, Path]],
                      module_key: Optional[str] = None,

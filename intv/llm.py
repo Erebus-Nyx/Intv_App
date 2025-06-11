@@ -1086,29 +1086,48 @@ class HybridLLMProcessor:
                 result = self.embedded_backend.generate_text(prompt, max_tokens=max_tokens)
                 if result and not result.startswith('Error'):
                     return {'output': result, 'success': True, 'mode': 'embedded'}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Embedded policy analysis failed in hybrid mode: {e}")
+                # Try with fixed max_tokens if auto failed
+                if max_tokens == "auto":
+                    try:
+                        result = self.embedded_backend.generate_text(prompt, max_tokens=200)
+                        if result and not result.startswith('Error'):
+                            return {'output': result, 'success': True, 'mode': 'embedded_fallback'}
+                    except Exception:
+                        pass
             
             # Fallback to external
             try:
                 result = self.external_backend.analyze_chunk(truncated_text, system_prompt=policy_prompt)
                 return {**result, 'mode': 'external_fallback'}
-            except Exception:
-                return {'output': 'Policy analysis failed', 'success': False, 'mode': 'hybrid_failed'}
+            except Exception as e:
+                logger.error(f"External policy analysis failed in hybrid mode: {e}")
+                return {'output': f'Policy analysis failed: {str(e)}', 'success': False, 'mode': 'hybrid_failed'}
         
         elif self.mode == 'embedded':
             try:
-                result = self.embedded_backend.generate_text(prompt, max_tokens=max_tokens)
+                result = self.backend.generate_text(prompt, max_tokens=max_tokens)
                 return {'output': result, 'success': True, 'mode': 'embedded'}
-            except Exception:
-                return {'output': 'Policy analysis failed', 'success': False, 'mode': 'embedded_failed'}
+            except Exception as e:
+                logger.error(f"Embedded policy analysis failed: {e}")
+                # Try with fixed max_tokens if auto failed
+                if max_tokens == "auto":
+                    try:
+                        logger.info("Retrying policy analysis with fixed max_tokens")
+                        result = self.backend.generate_text(prompt, max_tokens=200)
+                        return {'output': result, 'success': True, 'mode': 'embedded_fallback'}
+                    except Exception as e2:
+                        logger.error(f"Embedded policy analysis fallback failed: {e2}")
+                return {'output': f'Policy analysis failed: {str(e)}', 'success': False, 'mode': 'embedded_failed'}
         
         else:  # external
             try:
                 result = self.backend.analyze_chunk(truncated_text, system_prompt=policy_prompt)
                 return {**result, 'mode': 'external'}
-            except Exception:
-                return {'output': 'Policy analysis failed', 'success': False, 'mode': 'external_failed'}
+            except Exception as e:
+                logger.error(f"External policy analysis failed: {e}")
+                return {'output': f'Policy analysis failed: {str(e)}', 'success': False, 'mode': 'external_failed'}
     
     def analyze_chunks(self, chunks: List[str], **kwargs) -> List[Dict[str, Any]]:
         """Analyze multiple text chunks"""

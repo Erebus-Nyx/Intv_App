@@ -207,7 +207,7 @@ def main():
     parser.add_argument("--port", type=int, default=3773, help="Port to run the server on (default: 3773)")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
-    parser.add_argument("--version", action="version", version="intv-gui 0.2.0")
+    parser.add_argument("--version", action="version", version="intv-gui 0.2.5")
     
     # Check for help first
     if "--help" in sys.argv or "-h" in sys.argv:

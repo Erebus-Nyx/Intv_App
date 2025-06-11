@@ -1,31 +1,50 @@
 # Dockerfile.gpu - Dockerfile for GPU-enabled deployment
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1-runtime-ubuntu22.04
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including audio processing
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip python3-venv \
+    python3 python3-pip python3-venv pipx \
     tesseract-ocr libgl1-mesa-glx poppler-utils \
-    curl \
+    ffmpeg portaudio19-dev \
+    curl wget git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt ./
-RUN pip3 install --upgrade pip && pip3 install -r requirements.txt
+# Set up pipx environment
+ENV PIPX_HOME=/opt/pipx
+ENV PIPX_BIN_DIR=/usr/local/bin
+RUN python3 -m pip install --upgrade pip pipx
 
-# Install FastAPI, Uvicorn, and WebSockets dependencies
-RUN pip3 install fastapi uvicorn[standard] websockets
+# Install INTV with full dependencies via pipx
+COPY . /tmp/intv-src
+RUN cd /tmp/intv-src && \
+    pipx install --editable . && \
+    pipx inject intv \
+        "torch>=2.0.0" \
+        "pyannote.audio>=3.1.0" \
+        "pyannote.core>=5.0.0" \
+        "pytesseract>=0.3.10" \
+        "Pillow>=9.0.0" \
+        "pdf2image>=1.16.0" \
+        "fastapi>=0.100.0" \
+        "uvicorn[standard]>=0.20.0" \
+        "websockets>=11.0" && \
+    rm -rf /tmp/intv-src
 
 # Install Cloudflared (static binary from Cloudflare)
 RUN curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared
 
-# Copy the rest of the application
+# Copy application files
 COPY . .
 
-# Set environment variables for CUDA and app config
+# Set environment variables for optimal GPU and audio performance
 ENV CUDA_VISIBLE_DEVICES=0 \
+    TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0" \
+    FORCE_CUDA=1 \
+    CUDA_LAUNCH_BLOCKING=1 \
+    CUBLAS_WORKSPACE_CONFIG=:16:8 \
     LLM_API_PORT=${LLM_API_PORT:-5001} \
     LLM_PROVIDER=${LLM_PROVIDER:-ollama} \
     MODEL=${MODEL:-hf.co/unsloth/Phi-4-reasoning-plus-GGUF:Q5_K_M} \
@@ -38,13 +57,18 @@ ENV CUDA_VISIBLE_DEVICES=0 \
 # Expose the GUI port for NGINX/Cloudflare proxy
 EXPOSE 3773
 
+# Health check to ensure services are running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3773/health || exit 1
+
 # Entrypoint logic: select between GUI and CLI based on APP_MODE (default: gui)
 ENV APP_MODE=gui
 COPY scripts/cloudflared-entrypoint.sh /app/scripts/cloudflared-entrypoint.sh
 RUN chmod +x /app/scripts/cloudflared-entrypoint.sh
 
 ENTRYPOINT ["/app/scripts/cloudflared-entrypoint.sh"]
-# The entrypoint script should handle launching either the FastAPI GUI or the CLI pipeline based on $APP_MODE
-# Example logic in cloudflared-entrypoint.sh:
-#   if [ "$APP_MODE" = "cli" ]; then exec python src/main.py; else exec uvicorn src.modules.gui.app:app --host 0.0.0.0 --port 3773 --workers 4 --proxy-headers --forwarded-allow-ips=*; fi
+# The entrypoint script handles launching either:
+# - GUI mode: FastAPI server with WebUI
+# - CLI mode: Direct pipeline processing
+# - Testing mode: Run comprehensive test suite
 

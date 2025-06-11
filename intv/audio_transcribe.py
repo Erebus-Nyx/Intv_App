@@ -9,6 +9,7 @@ import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 import numpy as np
 import soundfile as sf
+import subprocess
 
 # Optional imports for microphone recording
 try:
@@ -23,6 +24,53 @@ try:
     HAS_AUDIO_SYSTEM = True
 except ImportError:
     HAS_AUDIO_SYSTEM = False
+
+def convert_audio_to_wav(audio_path: str) -> str:
+    """
+    Convert audio file to WAV format using ffmpeg if needed.
+    Returns path to WAV file (original if already WAV, converted temporary file otherwise).
+    """
+    audio_path_obj = Path(audio_path)
+    if audio_path_obj.suffix.lower() in ['.wav']:
+        return audio_path
+    
+    # For M4A, MP4, and other formats, convert to WAV using ffmpeg
+    try:
+        # Create temporary WAV file
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+            temp_wav_path = temp_wav.name
+        
+        # Use ffmpeg to convert to WAV
+        cmd = [
+            'ffmpeg', '-y',  # Overwrite output file if it exists
+            '-i', audio_path,  # Input file
+            '-acodec', 'pcm_s16le',  # Use PCM 16-bit encoding
+            '-ar', '16000',  # Sample rate 16kHz (good for speech)
+            '-ac', '1',  # Mono channel
+            temp_wav_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode != 0:
+            # Cleanup temp file on error
+            if os.path.exists(temp_wav_path):
+                os.unlink(temp_wav_path)
+            raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
+        
+        logging.info(f"Converted {audio_path} to WAV format: {temp_wav_path}")
+        return temp_wav_path
+        
+    except subprocess.TimeoutExpired:
+        # Cleanup temp file on timeout
+        if os.path.exists(temp_wav_path):
+            os.unlink(temp_wav_path)
+        raise RuntimeError(f"ffmpeg conversion timed out after 5 minutes")
+    except Exception as e:
+        # Cleanup temp file on any error
+        if 'temp_wav_path' in locals() and os.path.exists(temp_wav_path):
+            os.unlink(temp_wav_path)
+        raise RuntimeError(f"Audio conversion failed: {e}")
 
 def download_model_if_needed(model_size: str, models_dir: str = "models") -> str:
     """
@@ -192,74 +240,93 @@ def transcribe_audio_fastwhisper(audio_path, return_segments=True, language=None
     if config is None:
         from config import load_config
         config = load_config()
-    whisper_model = whisper_model or config.get('whisper_model', 'base')
+    # Let whisper_model parameter override config, but allow auto-selection if both are None
+    if whisper_model is None:
+        whisper_model = config.get('audio', {}).get('transcription', {}).get('model', 'auto')
     # Use faster-whisper if requested
     backend, pipe = get_transcribe_pipe(whisper_model, config)
     import soundfile as sf
     import numpy as np
-    audio, sr = sf.read(audio_path)
-    # --- Enhanced VAD: restrict transcription to speech segments only ---
-    vad_segments = None
-    if config is not None and config.get('enable_vad', True):
-        try:
-            # Try enhanced VAD first (pyannote-based)
-            if hasattr(audio_vad, 'detect_voice_activity_pyannote'):
-                vad_segments = audio_vad.detect_voice_activity_pyannote(audio_path, config)
-                logging.info(f"Enhanced VAD detected {len(vad_segments)} speech segments")
-            else:
-                # Fallback to basic VAD
-                vad_segments = audio_vad.detect_voice_activity(audio, sr)
-                logging.info(f"Basic VAD detected {len(vad_segments)} speech segments")
-            
-            if vad_segments and len(vad_segments) > 0:
-                # Apply VAD filtering to audio using enhanced method if available
-                if hasattr(audio_vad, 'apply_vad_filter_enhanced'):
-                    audio = audio_vad.apply_vad_filter_enhanced(audio, sr, vad_segments)
+    
+    # Convert audio file to WAV format if needed (for M4A, MP4, etc.)
+    wav_path = None
+    try:
+        wav_path = convert_audio_to_wav(audio_path)
+        audio, sr = sf.read(wav_path)
+        
+        # --- Enhanced VAD: restrict transcription to speech segments only ---
+        vad_segments = None
+        if config is not None and config.get('enable_vad', True):
+            try:
+                # Try enhanced VAD first (pyannote-based)
+                if hasattr(audio_vad, 'detect_voice_activity_pyannote'):
+                    vad_segments = audio_vad.detect_voice_activity_pyannote(wav_path, config)
+                    logging.info(f"Enhanced VAD detected {len(vad_segments)} speech segments")
                 else:
-                    # Convert time segments to sample indices and extract speech regions
-                    speech_segments = []
-                    for start_time, end_time in vad_segments:
-                        start_idx = int(start_time * sr)
-                        end_idx = int(end_time * sr)
-                        # Ensure indices are within bounds
-                        start_idx = max(0, min(start_idx, len(audio)))
-                        end_idx = max(start_idx, min(end_idx, len(audio)))
-                        if end_idx > start_idx:
-                            speech_segments.append(audio[start_idx:end_idx])
-                    
-                    # Concatenate speech segments
-                    if speech_segments:
-                        audio = np.concatenate(speech_segments)
-        except Exception as e:
-            logging.warning(f"VAD processing failed, using full audio: {e}")
-            vad_segments = None
-    if backend == "faster-whisper":
-        model = FasterWhisperModel(pipe, device="cuda" if torch.cuda.is_available() else "cpu")
-        segments, info = model.transcribe(audio, beam_size=5, language=language, word_timestamps=True)
-        segs = []
-        for seg in segments:
-            segs.append({
-                "text": seg.text,
-                "start": seg.start,
-                "end": seg.end
-            })
-        return segs if return_segments else " ".join([s["text"] for s in segs])
-    else:
-        input_audio = {"array": audio, "sampling_rate": sr}
-        result = pipe(input_audio, return_timestamps=True, generate_kwargs={"task": "transcribe"})
-        if return_segments:
-            segments = []
-            for seg in result.get("chunks", []):
-                segments.append({
-                    "text": seg["text"],
-                    "start": seg["timestamp"][0] if "timestamp" in seg else None,
-                    "end": seg["timestamp"][1] if "timestamp" in seg else None
+                    # Fallback to basic VAD
+                    vad_segments = audio_vad.detect_voice_activity(audio, sr)
+                    logging.info(f"Basic VAD detected {len(vad_segments)} speech segments")
+                
+                if vad_segments and len(vad_segments) > 0:
+                    # Apply VAD filtering to audio using enhanced method if available
+                    if hasattr(audio_vad, 'apply_vad_filter_enhanced'):
+                        audio = audio_vad.apply_vad_filter_enhanced(audio, sr, vad_segments)
+                    else:
+                        # Convert time segments to sample indices and extract speech regions
+                        speech_segments = []
+                        for start_time, end_time in vad_segments:
+                            start_idx = int(start_time * sr)
+                            end_idx = int(end_time * sr)
+                            # Ensure indices are within bounds
+                            start_idx = max(0, min(start_idx, len(audio)))
+                            end_idx = max(start_idx, min(end_idx, len(audio)))
+                            if end_idx > start_idx:
+                                speech_segments.append(audio[start_idx:end_idx])
+                        
+                        # Concatenate speech segments
+                        if speech_segments:
+                            audio = np.concatenate(speech_segments)
+            except Exception as e:
+                logging.warning(f"VAD processing failed, using full audio: {e}")
+                vad_segments = None
+        
+        # Perform transcription using selected backend
+        if backend == "faster-whisper":
+            model = FasterWhisperModel(pipe, device="cuda" if torch.cuda.is_available() else "cpu")
+            segments, info = model.transcribe(audio, beam_size=5, language=language, word_timestamps=True)
+            segs = []
+            for seg in segments:
+                segs.append({
+                    "text": seg.text,
+                    "start": seg.start,
+                    "end": seg.end
                 })
-            if not segments:
-                segments = [{"text": result["text"], "start": None, "end": None}]
-            return segments
+            return segs if return_segments else " ".join([s["text"] for s in segs])
         else:
-            return result["text"]
+            input_audio = {"array": audio, "sampling_rate": sr}
+            result = pipe(input_audio, return_timestamps=True, generate_kwargs={"task": "transcribe"})
+            if return_segments:
+                segments = []
+                for seg in result.get("chunks", []):
+                    segments.append({
+                        "text": seg["text"],
+                        "start": seg["timestamp"][0] if "timestamp" in seg else None,
+                        "end": seg["timestamp"][1] if "timestamp" in seg else None
+                    })
+                if not segments:
+                    segments = [{"text": result["text"], "start": None, "end": None}]
+                return segments
+            else:
+                return result["text"]
+    
+    finally:
+        # Clean up temporary WAV file if it was created
+        if wav_path and wav_path != audio_path and os.path.exists(wav_path):
+            try:
+                os.unlink(wav_path)
+                logging.debug(f"Cleaned up temporary WAV file: {wav_path}")
+            except Exception as e:
+                logging.warning(f"Failed to clean up temporary WAV file {wav_path}: {e}")
 
 
 def stream_microphone_transcription(output_path: Optional[str] = None, 
